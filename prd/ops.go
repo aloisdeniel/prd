@@ -123,7 +123,7 @@ TODO: Define functional requirements
 `, name, desc)
 
 	prdPath := filepath.Join(dirPath, "prd.md")
-	if err := os.WriteFile(prdPath, []byte(content), 0o644); err != nil {
+	if err := writePRD(prdPath, content); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	return newID, nil
@@ -199,7 +199,7 @@ func CreateUserStory(prdPath, name, desc string, criteria []string, techConsider
 		result.WriteString("\n" + newSection)
 	}
 
-	return os.WriteFile(prdPath, []byte(result.String()), 0o644)
+	return writePRD(prdPath, result.String())
 }
 
 // CompleteUserStory marks all acceptance criteria as completed.
@@ -321,7 +321,7 @@ func DeleteUserStory(prdPath string, usID int) error {
 		result.WriteString(lines[i] + "\n")
 	}
 
-	return os.WriteFile(prdPath, []byte(result.String()), 0o644)
+	return writePRD(prdPath, result.String())
 }
 
 // AddNote adds a dated note to the PRD file.
@@ -382,7 +382,7 @@ func AddNote(prdPath, noteContent string) error {
 		}
 	}
 
-	return os.WriteFile(prdPath, []byte(result.String()), 0o644)
+	return writePRD(prdPath, result.String())
 }
 
 // Slugify converts a string to a URL-friendly slug.
@@ -525,5 +525,92 @@ func writeLines(path string, lines []string, originalContent string) error {
 	if strings.HasSuffix(originalContent, "\n") && !strings.HasSuffix(result.String(), "\n") {
 		result.WriteString("\n")
 	}
-	return os.WriteFile(path, []byte(result.String()), 0o644)
+	return writePRD(path, result.String())
+}
+
+// writePRD writes content to the PRD file, updating the version footer.
+func writePRD(path, content string) error {
+	content = updateFooter(content)
+	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+// updateFooter updates or appends the document version footer.
+// It increments the patch version and sets the date to today.
+func updateFooter(content string) string {
+	today := time.Now().Format("2006-01-02")
+	lines := SplitLines(content)
+
+	// Find existing footer: look for "---" line followed by version/date lines
+	footerStart := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "---" {
+			// Check if next lines look like version/date footer
+			if i+1 < len(lines) && strings.Contains(lines[i+1], "Document Version:") {
+				footerStart = i
+				break
+			}
+		}
+	}
+
+	newVersion := "1.0"
+	if footerStart >= 0 {
+		// Extract current version and increment
+		for j := footerStart; j < len(lines); j++ {
+			if strings.Contains(lines[j], "Document Version:") {
+				// Parse version like *Document Version: 1.1*
+				s := lines[j]
+				s = strings.TrimSpace(s)
+				s = strings.TrimPrefix(s, "*")
+				s = strings.TrimSuffix(s, "*")
+				s = strings.TrimPrefix(s, "Document Version:")
+				s = strings.TrimSpace(s)
+				newVersion = incrementVersion(s)
+				break
+			}
+		}
+
+		// Remove old footer lines (from --- to end of version/date block)
+		footerEnd := footerStart + 1
+		for footerEnd < len(lines) {
+			line := strings.TrimSpace(lines[footerEnd])
+			if line == "" || strings.HasPrefix(line, "*") {
+				footerEnd++
+			} else {
+				break
+			}
+		}
+		// Trim trailing empty lines before footer
+		for footerStart > 0 && lines[footerStart-1] == "" {
+			footerStart--
+		}
+		lines = append(lines[:footerStart], lines[footerEnd:]...)
+	}
+
+	// Rebuild content without trailing empty lines
+	for len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	var result strings.Builder
+	for _, line := range lines {
+		result.WriteString(line + "\n")
+	}
+	result.WriteString("\n---\n")
+	result.WriteString(fmt.Sprintf("*Document Version: %s*\n", newVersion))
+	result.WriteString(fmt.Sprintf("*Last Updated: %s*\n", today))
+
+	return result.String()
+}
+
+func incrementVersion(v string) string {
+	parts := strings.SplitN(v, ".", 2)
+	if len(parts) != 2 {
+		return "1.0"
+	}
+	major := parts[0]
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return major + ".1"
+	}
+	return fmt.Sprintf("%s.%d", major, minor+1)
 }
