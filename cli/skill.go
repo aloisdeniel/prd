@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -11,10 +12,19 @@ func init() {
 }
 
 var skillCmd = &cobra.Command{
-	Use:   "skill",
-	Short: "Print the Claude Code SKILL.md document for prd",
-	Run: func(cmd *cobra.Command, args []string) {
+	Use:   "skill [file]",
+	Short: "Print or save the Claude Code SKILL.md document for prd",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 1 {
+			if err := os.WriteFile(args[0], []byte(skillDocument), 0o644); err != nil {
+				return err
+			}
+			fmt.Println(args[0])
+			return nil
+		}
 		fmt.Print(skillDocument)
+		return nil
 	},
 }
 
