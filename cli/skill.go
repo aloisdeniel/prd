@@ -148,6 +148,14 @@ prd feat <feature-id> us <story-id> delete
 
 Removes the user story section from the PRD file.
 
+### Bump version
+
+` + "```" + `
+prd feat <feature-id> bump
+` + "```" + `
+
+Increments the document version in the footer and updates the date to today.
+
 ### List notes
 
 ` + "```" + `

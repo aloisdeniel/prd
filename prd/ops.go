@@ -385,6 +385,15 @@ func AddNote(prdPath, noteContent string) error {
 	return writePRD(prdPath, result.String())
 }
 
+// BumpVersion increments the document version and updates the date.
+func BumpVersion(prdPath string) error {
+	content, err := os.ReadFile(prdPath)
+	if err != nil {
+		return err
+	}
+	return writePRD(prdPath, string(content))
+}
+
 // Slugify converts a string to a URL-friendly slug.
 func Slugify(s string) string {
 	s = strings.ToLower(s)

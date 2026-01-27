@@ -121,6 +121,7 @@ prd feat <id>                        # Print full PRD (validates structure)
 prd feat new --name "..." [--description "..."]  # Create feature, prints new ID
 prd feat current                     # Get feature ID from current git branch
 prd feat start <id>                  # Create and checkout feat/<dir> branch
+prd feat <id> bump                   # Bump version and update date
 ```
 
 ### User stories

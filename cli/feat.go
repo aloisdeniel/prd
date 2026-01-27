@@ -64,6 +64,10 @@ func runFeat(cmd *cobra.Command, args []string) error {
 		return routeNote(featureID, args[2:])
 	}
 
+	if len(args) >= 2 && args[1] == "bump" {
+		return runFeatBump(featureID)
+	}
+
 	path, feature, err := prd.LoadFeature("prd", featureID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -192,7 +196,19 @@ func runFeatList() error {
 	}
 
 	for _, e := range entries {
-		fmt.Printf("%s\t%s\t[%d/%d]\n", e.ID, e.Name, e.Completed, e.Total)
+		fmt.Printf("%s  %s  [%d/%d]\n", e.ID, e.Name, e.Completed, e.Total)
+
+		_, feature, err := prd.LoadFeature("prd", e.ID)
+		if err != nil {
+			continue
+		}
+		for _, us := range feature.UserStories {
+			status := "[ ]"
+			if prd.IsStoryCompleted(us) {
+				status = "[x]"
+			}
+			fmt.Printf("  %s US-%d  %s\n", status, us.ID, us.Name)
+		}
 	}
 	return nil
 }
@@ -360,6 +376,19 @@ func runAcceptList(feature prd.Feature, usID int) error {
 
 func runAcceptCriterion(path string, usID, acNum int) error {
 	if err := prd.CompleteAcceptanceCriterion(path, usID, acNum); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return nil
+}
+
+func runFeatBump(featureID string) error {
+	path, _, err := prd.LoadFeature("prd", featureID)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := prd.BumpVersion(path); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
