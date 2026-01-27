@@ -35,6 +35,15 @@ type AcceptanceCriterion struct {
 	Completed bool
 }
 
+// FeatureEntry represents a feature in the listing with summary info.
+type FeatureEntry struct {
+	ID        string
+	Name      string
+	Path      string
+	Completed int
+	Total     int
+}
+
 // Note represents a dated note entry.
 type Note struct {
 	Date    string

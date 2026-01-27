@@ -1,0 +1,64 @@
+package tui
+
+import "github.com/charmbracelet/bubbles/key"
+
+type keyMap struct {
+	Up       key.Binding
+	Down     key.Binding
+	Enter    key.Binding
+	Back     key.Binding
+	Quit     key.Binding
+	New      key.Binding
+	Space    key.Binding
+	Complete key.Binding
+	Search   key.Binding
+	Tab      key.Binding
+	Delete   key.Binding
+}
+
+var keys = keyMap{
+	Up: key.NewBinding(
+		key.WithKeys("up", "k"),
+		key.WithHelp("k/↑", "up"),
+	),
+	Down: key.NewBinding(
+		key.WithKeys("down", "j"),
+		key.WithHelp("j/↓", "down"),
+	),
+	Enter: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "open"),
+	),
+	Back: key.NewBinding(
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "back"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("q", "ctrl+c"),
+		key.WithHelp("q", "quit"),
+	),
+	New: key.NewBinding(
+		key.WithKeys("n"),
+		key.WithHelp("n", "new"),
+	),
+	Space: key.NewBinding(
+		key.WithKeys(" "),
+		key.WithHelp("space", "toggle"),
+	),
+	Complete: key.NewBinding(
+		key.WithKeys("c"),
+		key.WithHelp("c", "complete all"),
+	),
+	Search: key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "search"),
+	),
+	Tab: key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "next field"),
+	),
+	Delete: key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "delete"),
+	),
+}
