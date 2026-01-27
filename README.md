@@ -84,8 +84,6 @@ For a User Story, the ID must follow the format `US-X` where `X` is a sequential
 ```markdown
 # Task Priority System
 
-## Introduction
-
 Add priority levels to tasks so users can focus on what matters most. Tasks can be marked as high, medium, or low priority, with visual indicators and filtering to help users manage their workload effectively.
 
 ## Goals
@@ -277,6 +275,13 @@ Add a note to the Notes section of a feature PRD file with the current date.
 prd feat <feature-id> note add --content "<note-content>"
 ```
 
+### List notes
+
+List all notes in the Notes section of a feature PRD file.
+
+```sh
+prd feat <feature-id> note ls
+```
 
 ## TUI
 
