@@ -117,6 +117,13 @@ func routeUS(path string, feature *prd.Feature, args []string) error {
 		case "complete":
 			return runUserStoryComplete(path, usID)
 		case "accept":
+			if len(args) < 3 {
+				fmt.Fprintln(os.Stderr, "usage: prd feat <feature-id> us <user-story-id> accept <ls|<criterion-number> complete>")
+				os.Exit(1)
+			}
+			if args[2] == "ls" {
+				return runAcceptList(*feature, usID)
+			}
 			if len(args) < 4 || args[3] != "complete" {
 				fmt.Fprintln(os.Stderr, "usage: prd feat <feature-id> us <user-story-id> accept <criterion-number> complete")
 				os.Exit(1)
@@ -325,6 +332,28 @@ func runUserStoryComplete(path string, usID int) error {
 	if err := prd.CompleteUserStory(path, usID); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	return nil
+}
+
+func runAcceptList(feature prd.Feature, usID int) error {
+	var story *prd.UserStory
+	for i := range feature.UserStories {
+		if feature.UserStories[i].ID == usID {
+			story = &feature.UserStories[i]
+			break
+		}
+	}
+	if story == nil {
+		fmt.Fprintf(os.Stderr, "user story US-%d not found\n", usID)
+		os.Exit(1)
+	}
+	for i, ac := range story.AcceptanceCriteria {
+		status := "[ ]"
+		if ac.Completed {
+			status = "[x]"
+		}
+		fmt.Printf("%d\t%s\t%s\n", i+1, status, ac.Text)
 	}
 	return nil
 }

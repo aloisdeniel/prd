@@ -116,6 +116,14 @@ prd feat <feature-id> us new --name "Story name" --description "Description" \
 
 Appends a new user story to the feature's PRD file.
 
+### List acceptance criteria
+
+` + "```" + `
+prd feat <feature-id> us <story-id> accept ls
+` + "```" + `
+
+Lists all acceptance criteria with their number (1-based), status, and text.
+
 ### Complete a single acceptance criterion
 
 ` + "```" + `
