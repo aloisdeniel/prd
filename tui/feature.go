@@ -5,23 +5,24 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/aloisdeniel/prd/prd"
 )
 
 type featureDetailModel struct {
-	feature      *prd.Feature
-	path         string
-	id           string
-	progress     map[int]bool
-	cursor       int
-	scrollOffset int
-	width        int
-	height       int
-	err          error
-	basePath     string
+	feature  *prd.Feature
+	path     string
+	id       string
+	progress map[int]bool
+	cursor   int
+	viewport viewport.Model
+	ready    bool
+	width    int
+	height   int
+	err      error
+	basePath string
 }
 
 func newFeatureDetailModel(basePath, id string) featureDetailModel {
@@ -48,6 +49,8 @@ func (m featureDetailModel) Init() tea.Cmd {
 }
 
 func (m featureDetailModel) Update(msg tea.Msg) (featureDetailModel, tea.Cmd) {
+	var cmd tea.Cmd
+
 	switch msg := msg.(type) {
 	case featureLoadedMsg:
 		m.feature = msg.feature
@@ -57,6 +60,7 @@ func (m featureDetailModel) Update(msg tea.Msg) (featureDetailModel, tea.Cmd) {
 		if m.cursor >= len(m.feature.UserStories) {
 			m.cursor = max(0, len(m.feature.UserStories)-1)
 		}
+		m.updateViewportContent()
 	case errMsg:
 		m.err = msg.err
 	case tea.KeyMsg:
@@ -72,32 +76,46 @@ func (m featureDetailModel) Update(msg tea.Msg) (featureDetailModel, tea.Cmd) {
 			if m.cursor < len(m.feature.UserStories)-1 {
 				m.cursor++
 			}
-		case key.Matches(msg, keys.ScrollUp):
-			m.scrollOffset -= m.scrollAmount()
-			if m.scrollOffset < 0 {
-				m.scrollOffset = 0
-			}
-		case key.Matches(msg, keys.ScrollDown):
-			m.scrollOffset += m.scrollAmount()
+		case key.Matches(msg, keys.ScrollUp), key.Matches(msg, keys.ScrollDown):
+			m.viewport, cmd = m.viewport.Update(msg)
+			return m, cmd
 		}
 	}
 	return m, nil
 }
 
-func (m featureDetailModel) scrollAmount() int {
-	if m.height > 4 {
-		return m.height / 2
+func (m *featureDetailModel) SetSize(width, height int) {
+	m.width = width
+	m.height = height
+	m.viewport.Width = width
+	m.viewport.Height = height
+	m.ready = true
+	m.updateViewportContent()
+}
+
+func (m *featureDetailModel) updateViewportContent() {
+	if !m.ready {
+		return
 	}
-	return 5
+	m.viewport.SetContent(m.renderContent())
 }
 
 func (m featureDetailModel) View() string {
-	var b strings.Builder
-
 	if m.feature == nil {
-		b.WriteString(dimStyle.PaddingLeft(2).Render("Loading..."))
-		return b.String()
+		return dimStyle.PaddingLeft(2).Render("Loading...")
 	}
+	if !m.ready {
+		return dimStyle.PaddingLeft(2).Render("Initializing...")
+	}
+	return m.viewport.View()
+}
+
+func (m featureDetailModel) renderContent() string {
+	if m.feature == nil {
+		return ""
+	}
+
+	var b strings.Builder
 
 	b.WriteString(titleStyle.Render(m.feature.Name))
 	b.WriteString("\n\n")
@@ -162,35 +180,7 @@ func (m featureDetailModel) View() string {
 	m.renderSection(&b, "Open Questions", m.feature.OpenQuestions)
 	m.renderNotes(&b)
 
-	return m.applyScroll(b.String())
-}
-
-func (m featureDetailModel) applyScroll(content string) string {
-	lines := strings.Split(content, "\n")
-	totalLines := len(lines)
-
-	// Clamp scroll offset
-	maxOffset := totalLines - m.height
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	offset := m.scrollOffset
-	if offset > maxOffset {
-		offset = maxOffset
-	}
-
-	// Calculate visible range
-	start := offset
-	end := offset + m.height
-	if end > totalLines {
-		end = totalLines
-	}
-
-	if start >= totalLines {
-		return ""
-	}
-
-	return strings.Join(lines[start:end], "\n")
+	return b.String()
 }
 
 func (m featureDetailModel) renderSection(b *strings.Builder, title, content string) {
@@ -247,9 +237,4 @@ func nextStoryID(stories []prd.UserStory, progress map[int]bool) int {
 		}
 	}
 	return bestID
-}
-
-func (m featureDetailModel) statusHelp() string {
-	parts := []string{"j/k navigate", "ctrl+u/d scroll", "enter open", "u/n new story", "d delete", "esc back"}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Join(parts, "  "))
 }

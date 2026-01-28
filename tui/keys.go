@@ -1,6 +1,21 @@
 package tui
 
-import "github.com/charmbracelet/bubbles/key"
+import (
+	"github.com/charmbracelet/bubbles/key"
+)
+
+// contextualKeyMap represents key bindings for a specific screen context
+type contextualKeyMap struct {
+	bindings []key.Binding
+}
+
+func (k contextualKeyMap) ShortHelp() []key.Binding {
+	return k.bindings
+}
+
+func (k contextualKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{k.bindings}
+}
 
 type keyMap struct {
 	Up         key.Binding
@@ -91,4 +106,47 @@ var keys = keyMap{
 		key.WithKeys("ctrl+d"),
 		key.WithHelp("ctrl+d", "scroll down"),
 	),
+}
+
+// Key maps for different screens
+func featureListKeys() contextualKeyMap {
+	return contextualKeyMap{
+		bindings: []key.Binding{keys.Up, keys.Down, keys.Enter, keys.NewFeature, keys.Search, keys.Quit},
+	}
+}
+
+func featureDetailKeys() contextualKeyMap {
+	return contextualKeyMap{
+		bindings: []key.Binding{keys.Up, keys.Down, keys.ScrollUp, keys.ScrollDown, keys.Enter, keys.NewStory, keys.Delete, keys.Back},
+	}
+}
+
+func storyDetailKeys() contextualKeyMap {
+	return contextualKeyMap{
+		bindings: []key.Binding{keys.ScrollUp, keys.ScrollDown, keys.Complete, keys.Back},
+	}
+}
+
+func featureFormKeys() contextualKeyMap {
+	return contextualKeyMap{
+		bindings: []key.Binding{keys.Tab, keys.Space, keys.Enter, keys.Back},
+	}
+}
+
+func storyFormKeys() contextualKeyMap {
+	return contextualKeyMap{
+		bindings: []key.Binding{keys.Tab, keys.Left, keys.Right, keys.Enter, keys.Back},
+	}
+}
+
+func searchKeys() contextualKeyMap {
+	return contextualKeyMap{
+		bindings: []key.Binding{keys.Up, keys.Down, keys.Enter, keys.Back},
+	}
+}
+
+func wideKeys() contextualKeyMap {
+	return contextualKeyMap{
+		bindings: []key.Binding{keys.Up, keys.Down, keys.ScrollUp, keys.ScrollDown, keys.Enter, keys.Space, keys.NewFeature, keys.NewStory, keys.Delete, keys.Search, keys.Complete, keys.Quit},
+	}
 }

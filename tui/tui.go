@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -46,6 +47,7 @@ type Model struct {
 	storyForm      userStoryFormModel
 	search         searchModel
 	sidebar        sidebarModel
+	help           help.Model
 	wideMode       bool
 	width          int
 	height         int
@@ -57,10 +59,13 @@ type Model struct {
 }
 
 func NewModel(basePath string) Model {
+	h := help.New()
+	h.ShowAll = false
 	return Model{
 		basePath:    basePath,
 		featureList: newFeatureListModel(basePath),
 		sidebar:     newSidebarModel(basePath),
+		help:        h,
 		stack:       []screenState{{screen: screenFeatureList}},
 	}
 }
@@ -94,6 +99,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.wideMode = true
 		m.sidebar.width = sidebarWidth
 		m.sidebar.height = msg.Height
+		// Update viewport sizes for detail models
+		m.featureDetail.SetSize(m.detailPanelWidth(), m.detailPanelHeight())
+		m.storyDetail.SetSize(m.detailPanelWidth(), m.detailPanelHeight())
 		return m, nil
 	case fileChangedMsg:
 		// Reload everything and restart the watcher for the next change.
@@ -235,7 +243,7 @@ func (m Model) updateWide(msg tea.Msg) (tea.Model, tea.Cmd) {
 				us := sel.feature.UserStories[sel.storyIdx]
 				completed := sel.progress[us.ID]
 				m.storyDetail = newUserStoryDetailModel(m.basePath, sel.featureID, fe.path, &us, completed)
-				m.storyDetail.height = m.detailPanelHeight()
+				m.storyDetail.SetSize(m.detailPanelWidth(), m.detailPanelHeight())
 				// Set stack to story detail so View knows what to render
 				m.stack = []screenState{{screen: screenUserStoryDetail}}
 				return m, nil
@@ -293,8 +301,12 @@ func (m *Model) selectInSidebar(featureID string, isStory bool, storyID int) {
 }
 
 func (m *Model) detailPanelHeight() int {
-	// Account for title line and spacing in viewWide
-	return m.height - 4
+	// Account for title line, spacing, and status bar in viewWide
+	return m.height - 6
+}
+
+func (m *Model) detailPanelWidth() int {
+	return max(m.width-sidebarWidth-3, 10)
 }
 
 func (m *Model) syncDetailFromSidebar() {
@@ -330,7 +342,7 @@ func (m *Model) syncDetailFromSidebar() {
 			m.featureDetail.path = fe.path
 			m.featureDetail.progress = fe.progress
 			m.featureDetail.cursor = sel.storyIdx
-			m.featureDetail.height = m.detailPanelHeight()
+			m.featureDetail.SetSize(m.detailPanelWidth(), m.detailPanelHeight())
 			m.stack = []screenState{{screen: screenFeatureDetail}}
 		}
 	} else {
@@ -340,7 +352,7 @@ func (m *Model) syncDetailFromSidebar() {
 			m.featureDetail.feature = fe.feature
 			m.featureDetail.path = fe.path
 			m.featureDetail.progress = fe.progress
-			m.featureDetail.height = m.detailPanelHeight()
+			m.featureDetail.SetSize(m.detailPanelWidth(), m.detailPanelHeight())
 			m.stack = []screenState{{screen: screenFeatureDetail}}
 		}
 	}
@@ -434,6 +446,7 @@ func (m Model) updateFeatureDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if s := m.featureDetail.selectedStory(); s != nil {
 				completed := m.featureDetail.progress[s.ID]
 				m.storyDetail = newUserStoryDetailModel(m.basePath, m.featureDetail.id, m.featureDetail.path, s, completed)
+				m.storyDetail.SetSize(m.detailPanelWidth(), m.detailPanelHeight())
 				m.push(screenUserStoryDetail)
 				return m, nil
 			}
@@ -632,29 +645,28 @@ func (m Model) viewInvalidDetail() string {
 }
 
 func (m Model) currentStatusHelp() string {
+	var keyMap contextualKeyMap
 	if m.wideMode && !m.isOverlayScreen() {
-		return m.wideStatusHelp()
+		keyMap = wideKeys()
+	} else {
+		switch m.currentScreen() {
+		case screenFeatureList:
+			keyMap = featureListKeys()
+		case screenFeatureDetail:
+			keyMap = featureDetailKeys()
+		case screenUserStoryDetail:
+			keyMap = storyDetailKeys()
+		case screenFeatureForm:
+			keyMap = featureFormKeys()
+		case screenUserStoryForm:
+			keyMap = storyFormKeys()
+		case screenSearch:
+			keyMap = searchKeys()
+		default:
+			return ""
+		}
 	}
-	switch m.currentScreen() {
-	case screenFeatureList:
-		return m.featureList.statusHelp()
-	case screenFeatureDetail:
-		return m.featureDetail.statusHelp()
-	case screenUserStoryDetail:
-		return m.storyDetail.statusHelp()
-	case screenFeatureForm:
-		return m.featureForm.statusHelp()
-	case screenUserStoryForm:
-		return m.storyForm.statusHelp()
-	case screenSearch:
-		return m.search.statusHelp()
-	}
-	return ""
-}
-
-func (m Model) wideStatusHelp() string {
-	parts := []string{"j/k navigate", "ctrl+u/d scroll", "enter open/toggle", "space expand", "f new feature", "u/n new story", "d delete", "/ search", "c complete", "q quit"}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Join(parts, "  "))
+	return m.help.View(keyMap)
 }
 
 func Run(basePath string) error {

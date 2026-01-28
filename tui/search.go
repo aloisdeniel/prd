@@ -168,7 +168,3 @@ func (m searchModel) selectedResult() *searchResult {
 	}
 	return nil
 }
-
-func (m searchModel) statusHelp() string {
-	return dimStyle.Render("type to search  ↑/↓ navigate  enter open  esc back")
-}

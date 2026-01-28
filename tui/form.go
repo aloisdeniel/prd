@@ -136,10 +136,6 @@ func (m featureFormModel) View() string {
 	return b.String()
 }
 
-func (m featureFormModel) statusHelp() string {
-	return dimStyle.Render("tab next field  space toggle  enter submit  esc cancel")
-}
-
 // userStoryFormModel handles creating a new user story.
 type userStoryFormModel struct {
 	inputs   []textinput.Model
@@ -292,10 +288,6 @@ func (m userStoryFormModel) View() string {
 	}
 
 	return b.String()
-}
-
-func (m userStoryFormModel) statusHelp() string {
-	return dimStyle.Render("tab next field  ←/→ priority  enter submit  esc cancel")
 }
 
 var errEmpty = fmt.Errorf("name cannot be empty")

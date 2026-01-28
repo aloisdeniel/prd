@@ -1,11 +1,8 @@
 package tui
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/aloisdeniel/prd/prd"
 )
@@ -67,9 +64,4 @@ func (m featureListModel) selectedEntry() *prd.FeatureEntry {
 		return &m.entries[m.cursor]
 	}
 	return nil
-}
-
-func (m featureListModel) statusHelp() string {
-	parts := []string{"j/k navigate", "enter open", "f/n new feature", "/ search", "q quit"}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Join(parts, "  "))
 }
