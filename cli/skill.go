@@ -28,7 +28,12 @@ var skillCmd = &cobra.Command{
 	},
 }
 
-const skillDocument = `# PRD — Product Requirements Document Manager
+const skillDocument = `---
+name: prd
+description: "A CLI tool to manage Product Requirements Documents (PRDs) with features, user stories, and acceptance criteria."
+---
+
+	# PRD — Product Requirements Document Manager
 
 Use the ` + "`prd`" + ` CLI to manage feature PRDs, user stories, and acceptance criteria. PRD documents live under the ` + "`prd/`" + ` directory as markdown files.
 
