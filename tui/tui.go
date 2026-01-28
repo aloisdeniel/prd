@@ -97,8 +97,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.wideMode = true
-		m.sidebar.width = sidebarWidth
-		m.sidebar.height = msg.Height
+		m.sidebar.SetSize(sidebarWidth, msg.Height)
 		// Update viewport sizes for detail models
 		m.featureDetail.SetSize(m.detailPanelWidth(), m.detailPanelHeight())
 		m.storyDetail.SetSize(m.detailPanelWidth(), m.detailPanelHeight())
@@ -265,9 +264,9 @@ func (m Model) updateWide(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			// Navigation keys go to sidebar
 			var cmd tea.Cmd
-			oldCursor := m.sidebar.cursor
+			oldCursor := m.sidebar.cursor()
 			m.sidebar, cmd = m.sidebar.Update(msg)
-			if m.sidebar.cursor != oldCursor {
+			if m.sidebar.cursor() != oldCursor {
 				m.syncDetailFromSidebar()
 			}
 			return m, cmd
@@ -282,15 +281,19 @@ func (m *Model) selectInSidebar(featureID string, isStory bool, storyID int) {
 		if fe.entry.ID == featureID {
 			m.sidebar.allFeats[i].expanded = true
 			m.sidebar.rebuildItems()
-			for j, item := range m.sidebar.items {
+			for j, listItem := range m.sidebar.list.Items() {
+				item, ok := listItem.(sidebarItem)
+				if !ok {
+					continue
+				}
 				if isStory {
 					if item.isStory && item.featureID == featureID && item.feature.UserStories[item.storyIdx].ID == storyID {
-						m.sidebar.cursor = j
+						m.sidebar.list.Select(j)
 						return
 					}
 				} else {
 					if !item.isStory && item.featureID == featureID {
-						m.sidebar.cursor = j
+						m.sidebar.list.Select(j)
 						return
 					}
 				}
@@ -554,7 +557,21 @@ func (m Model) updateSearch(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	content := m.viewWide()
+	var content string
+
+	// Handle overlay screens (forms, search)
+	if m.isOverlayScreen() {
+		switch m.currentScreen() {
+		case screenFeatureForm:
+			content = m.featureForm.View()
+		case screenUserStoryForm:
+			content = m.storyForm.View()
+		case screenSearch:
+			content = m.search.View()
+		}
+	} else {
+		content = m.viewWide()
+	}
 
 	// Status bar
 	statusHelp := m.currentStatusHelp()

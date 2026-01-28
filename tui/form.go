@@ -103,7 +103,8 @@ func (m featureFormModel) Update(msg tea.Msg) (featureFormModel, tea.Cmd) {
 func (m featureFormModel) View() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("New Feature"))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("New Feature"))
 	b.WriteString("\n\n")
 
 	b.WriteString(inputLabelStyle.Render("Name"))
@@ -249,7 +250,8 @@ func (m userStoryFormModel) Update(msg tea.Msg) (userStoryFormModel, tea.Cmd) {
 func (m userStoryFormModel) View() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("New User Story"))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("New User Story"))
 	b.WriteString("\n\n")
 
 	b.WriteString(inputLabelStyle.Render("Name"))

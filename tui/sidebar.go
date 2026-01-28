@@ -2,9 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/aloisdeniel/prd/prd"
@@ -24,6 +26,14 @@ type sidebarItem struct {
 	errors    []string // Parse or validation errors
 }
 
+// Implement list.Item interface
+func (i sidebarItem) FilterValue() string {
+	if i.isStory {
+		return i.feature.UserStories[i.storyIdx].Name
+	}
+	return i.featureID
+}
+
 type sidebarEntry struct {
 	entry    prd.FeatureEntry
 	feature  *prd.Feature
@@ -36,12 +46,79 @@ type sidebarEntry struct {
 
 type sidebarModel struct {
 	basePath string
-	items    []sidebarItem
+	list     list.Model
 	allFeats []sidebarEntry
-	cursor   int
 	width    int
 	height   int
 	err      error
+}
+
+// sidebarDelegate handles custom rendering for sidebar items
+type sidebarDelegate struct {
+	allFeats *[]sidebarEntry
+}
+
+func (d sidebarDelegate) Height() int                             { return 1 }
+func (d sidebarDelegate) Spacing() int                            { return 0 }
+func (d sidebarDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
+
+func (d sidebarDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	item, ok := listItem.(sidebarItem)
+	if !ok {
+		return
+	}
+
+	cursor := "  "
+	style := normalStyle
+	if index == m.Index() {
+		cursor = selectedStyle.Render("> ")
+		style = selectedStyle
+	}
+
+	var line string
+	if !item.isStory {
+		// Feature row
+		fe := (*d.allFeats)[item.entryIdx]
+
+		if item.invalid {
+			// Invalid document - show with INVALID tag
+			name := truncate(fe.entry.Name, sidebarWidth-20)
+			line = fmt.Sprintf("%s  %s  %s %s", cursor, style.Render(fe.entry.ID), errorStyle.Render(name), invalidTag)
+		} else {
+			// Valid document
+			arrow := "▸"
+			if item.expanded {
+				arrow = "▾"
+			}
+			progress := fmt.Sprintf("[%d/%d]", fe.entry.Completed, fe.entry.Total)
+			pStyle := incompleteStyle
+			if fe.entry.Completed == fe.entry.Total && fe.entry.Total > 0 {
+				pStyle = completedStyle
+			}
+			name := truncate(fe.entry.Name, sidebarWidth-16)
+			line = fmt.Sprintf("%s%s %s  %s %s", cursor, arrow, style.Render(fe.entry.ID), style.Render(name), pStyle.Render(progress))
+		}
+	} else {
+		// User story row
+		us := item.feature.UserStories[item.storyIdx]
+		status := checkboxUnchecked
+		if item.progress[us.ID] {
+			status = checkboxChecked
+		}
+		isNext := us.ID == nextStoryID(item.feature.UserStories, item.progress)
+		tag := ""
+		if isNext {
+			tag = " " + nextTag
+		}
+		maxName := sidebarWidth - 15
+		if isNext {
+			maxName -= 6 // room for " NEXT"
+		}
+		name := truncate(us.Name, maxName)
+		line = fmt.Sprintf("%s  %s US-%d  %s%s", cursor, status, us.ID, style.Render(name), tag)
+	}
+
+	fmt.Fprint(w, line)
 }
 
 type sidebarLoadedMsg struct {
@@ -49,7 +126,27 @@ type sidebarLoadedMsg struct {
 }
 
 func newSidebarModel(basePath string) sidebarModel {
-	return sidebarModel{basePath: basePath, width: sidebarWidth}
+	// Create list with empty items initially
+	delegate := sidebarDelegate{}
+	l := list.New([]list.Item{}, delegate, sidebarWidth, 10)
+	l.SetShowTitle(false)
+	l.SetShowStatusBar(false)
+	l.SetShowFilter(false)
+	l.SetShowHelp(false)
+	l.SetShowPagination(false)
+	l.Styles.NoItems = dimStyle
+	l.SetFilteringEnabled(false)
+
+	m := sidebarModel{
+		basePath: basePath,
+		list:     l,
+		width:    sidebarWidth,
+	}
+	// Update delegate with reference to allFeats
+	delegate.allFeats = &m.allFeats
+	m.list.SetDelegate(delegate)
+
+	return m
 }
 
 func (m sidebarModel) loadAll() tea.Msg {
@@ -86,10 +183,10 @@ func (m sidebarModel) loadAll() tea.Msg {
 }
 
 func (m *sidebarModel) rebuildItems() {
-	m.items = nil
+	var items []list.Item
 	for i := range m.allFeats {
 		fe := &m.allFeats[i]
-		m.items = append(m.items, sidebarItem{
+		items = append(items, sidebarItem{
 			isStory:   false,
 			featureID: fe.entry.ID,
 			feature:   fe.feature,
@@ -101,7 +198,7 @@ func (m *sidebarModel) rebuildItems() {
 		})
 		if fe.expanded && fe.feature != nil {
 			for si := range fe.feature.UserStories {
-				m.items = append(m.items, sidebarItem{
+				items = append(items, sidebarItem{
 					isStory:   true,
 					featureID: fe.entry.ID,
 					feature:   fe.feature,
@@ -112,9 +209,25 @@ func (m *sidebarModel) rebuildItems() {
 			}
 		}
 	}
-	if m.cursor >= len(m.items) {
-		m.cursor = max(0, len(m.items)-1)
+
+	// Preserve cursor position
+	oldIndex := m.list.Index()
+	m.list.SetItems(items)
+	if oldIndex >= len(items) {
+		oldIndex = max(0, len(items)-1)
 	}
+	m.list.Select(oldIndex)
+}
+
+func (m *sidebarModel) SetSize(width, height int) {
+	m.width = width
+	m.height = height
+	// Account for title and padding in view
+	listHeight := height - 5
+	if listHeight < 1 {
+		listHeight = 1
+	}
+	m.list.SetSize(width, listHeight)
 }
 
 func (m sidebarModel) Init() tea.Cmd {
@@ -136,28 +249,21 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 			}
 		}
 		m.err = nil
+		// Update delegate reference after allFeats changes
+		delegate := sidebarDelegate{allFeats: &m.allFeats}
+		m.list.SetDelegate(delegate)
 		m.rebuildItems()
 	case errMsg:
 		m.err = msg.err
 	case tea.KeyMsg:
 		switch {
-		case key.Matches(msg, keys.Up):
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case key.Matches(msg, keys.Down):
-			if m.cursor < len(m.items)-1 {
-				m.cursor++
-			}
-		case key.Matches(msg, keys.Space):
-			if len(m.items) > 0 && !m.items[m.cursor].isStory && !m.items[m.cursor].invalid {
-				idx := m.items[m.cursor].entryIdx
-				m.allFeats[idx].expanded = !m.allFeats[idx].expanded
-				m.rebuildItems()
-			}
-		case key.Matches(msg, keys.Enter):
-			if len(m.items) > 0 && !m.items[m.cursor].isStory && !m.items[m.cursor].invalid {
-				idx := m.items[m.cursor].entryIdx
+		case key.Matches(msg, keys.Up), key.Matches(msg, keys.Down):
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(msg)
+			return m, cmd
+		case key.Matches(msg, keys.Space), key.Matches(msg, keys.Enter):
+			if sel := m.selected(); sel != nil && !sel.isStory && !sel.invalid {
+				idx := sel.entryIdx
 				m.allFeats[idx].expanded = !m.allFeats[idx].expanded
 				m.rebuildItems()
 			}
@@ -179,73 +285,27 @@ func (m sidebarModel) View() string {
 		return b.String()
 	}
 
-	if len(m.items) == 0 {
+	if len(m.list.Items()) == 0 {
 		b.WriteString(dimStyle.Render(" No features."))
 		return b.String()
 	}
 
-	for i, item := range m.items {
-		cursor := "  "
-		style := normalStyle
-		if i == m.cursor {
-			cursor = selectedStyle.Render("> ")
-			style = selectedStyle
-		}
-
-		if !item.isStory {
-			// Feature row
-			fe := m.allFeats[item.entryIdx]
-
-			if item.invalid {
-				// Invalid document - show with INVALID tag
-				name := truncate(fe.entry.Name, sidebarWidth-20)
-				line := fmt.Sprintf("%s  %s  %s %s", cursor, style.Render(fe.entry.ID), errorStyle.Render(name), invalidTag)
-				b.WriteString(line + "\n")
-			} else {
-				// Valid document
-				arrow := "▸"
-				if item.expanded {
-					arrow = "▾"
-				}
-				progress := fmt.Sprintf("[%d/%d]", fe.entry.Completed, fe.entry.Total)
-				pStyle := incompleteStyle
-				if fe.entry.Completed == fe.entry.Total && fe.entry.Total > 0 {
-					pStyle = completedStyle
-				}
-				name := truncate(fe.entry.Name, sidebarWidth-16)
-				line := fmt.Sprintf("%s%s %s  %s %s", cursor, arrow, style.Render(fe.entry.ID), style.Render(name), pStyle.Render(progress))
-				b.WriteString(line + "\n")
-			}
-		} else {
-			// User story row
-			us := item.feature.UserStories[item.storyIdx]
-			status := checkboxUnchecked
-			if item.progress[us.ID] {
-				status = checkboxChecked
-			}
-			isNext := us.ID == nextStoryID(item.feature.UserStories, item.progress)
-			tag := ""
-			if isNext {
-				tag = " " + nextTag
-			}
-			maxName := sidebarWidth - 15
-			if isNext {
-				maxName -= 6 // room for " NEXT"
-			}
-			name := truncate(us.Name, maxName)
-			line := fmt.Sprintf("%s  %s US-%d  %s%s", cursor, status, us.ID, style.Render(name), tag)
-			b.WriteString(line + "\n")
-		}
-	}
-
+	b.WriteString(m.list.View())
 	return b.String()
 }
 
 func (m sidebarModel) selected() *sidebarItem {
-	if m.cursor >= 0 && m.cursor < len(m.items) {
-		return &m.items[m.cursor]
+	if item := m.list.SelectedItem(); item != nil {
+		if si, ok := item.(sidebarItem); ok {
+			return &si
+		}
 	}
 	return nil
+}
+
+// cursor returns the current cursor position for compatibility with tui.go
+func (m sidebarModel) cursor() int {
+	return m.list.Index()
 }
 
 func (m sidebarModel) selectedFeatureEntry() *sidebarEntry {
