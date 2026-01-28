@@ -35,13 +35,14 @@ type sidebarEntry struct {
 }
 
 type sidebarModel struct {
-	basePath string
-	items    []sidebarItem
-	allFeats []sidebarEntry
-	cursor   int
-	width    int
-	height   int
-	err      error
+	basePath     string
+	items        []sidebarItem
+	allFeats     []sidebarEntry
+	cursor       int
+	scrollOffset int
+	width        int
+	height       int
+	err          error
 }
 
 type sidebarLoadedMsg struct {
@@ -120,6 +121,39 @@ func (m *sidebarModel) rebuildItems() {
 func (m *sidebarModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+	m.ensureCursorVisible()
+}
+
+// visibleHeight returns how many item lines fit in the sidebar below the title.
+func (m sidebarModel) visibleHeight() int {
+	// Title (1 line) + margin bottom (1 line) = 2 lines of header
+	h := m.height - 4
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
+// ensureCursorVisible adjusts scrollOffset so the cursor is within the visible window.
+func (m *sidebarModel) ensureCursorVisible() {
+	vis := m.visibleHeight()
+	if m.cursor < m.scrollOffset {
+		m.scrollOffset = m.cursor
+	}
+	if m.cursor >= m.scrollOffset+vis {
+		m.scrollOffset = m.cursor - vis + 1
+	}
+	// Clamp
+	maxOffset := len(m.items) - vis
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if m.scrollOffset > maxOffset {
+		m.scrollOffset = maxOffset
+	}
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
 }
 
 func (m sidebarModel) Init() tea.Cmd {
@@ -142,6 +176,7 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 		}
 		m.err = nil
 		m.rebuildItems()
+		m.ensureCursorVisible()
 	case errMsg:
 		m.err = msg.err
 	case tea.KeyMsg:
@@ -162,30 +197,44 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 			}
 			// If it's a story, the parent tui.go handles opening the detail
 		}
+		m.ensureCursorVisible()
 	}
 	return m, nil
 }
 
 func (m sidebarModel) View() string {
-	titleStyle := lipgloss.NewStyle().
+	headerStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("170")).
 		MarginBottom(1).
 		PaddingLeft(1)
 
-	title := titleStyle.Render("Features")
-
 	if m.err != nil {
-		return lipgloss.JoinVertical(lipgloss.Left, title, errorStyle.Render(m.err.Error()))
+		return lipgloss.JoinVertical(lipgloss.Left, headerStyle.Render("Features"), errorStyle.Render(m.err.Error()))
 	}
 
 	if len(m.items) == 0 {
-		return lipgloss.JoinVertical(lipgloss.Left, title, dimStyle.PaddingLeft(1).Render("No features."))
+		return lipgloss.JoinVertical(lipgloss.Left, headerStyle.Render("Features"), dimStyle.PaddingLeft(1).Render("No features."))
 	}
 
-	// Render items directly without tree (simpler, no extra padding)
+	// Show scroll position in title when scrolled
+	total := len(m.items)
+	title := "Features"
+	if m.scrollOffset > 0 || total > m.visibleHeight() {
+		title = fmt.Sprintf("Features (%d/%d)", m.cursor+1, total)
+	}
+
+	// Render only the visible slice of items
+	vis := m.visibleHeight()
+	start := m.scrollOffset
+	end := start + vis
+	if end > total {
+		end = total
+	}
+
 	var lines []string
-	for i, item := range m.items {
+	for i := start; i < end; i++ {
+		item := m.items[i]
 		if item.isStory {
 			lines = append(lines, m.renderStoryLine(i, item))
 		} else {
@@ -194,7 +243,7 @@ func (m sidebarModel) View() string {
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	return lipgloss.JoinVertical(lipgloss.Left, title, content)
+	return lipgloss.JoinVertical(lipgloss.Left, headerStyle.Render(title), content)
 }
 
 func (m sidebarModel) renderFeatureLine(idx int, item sidebarItem) string {
@@ -205,21 +254,17 @@ func (m sidebarModel) renderFeatureLine(idx int, item sidebarItem) string {
 		style = selectedStyle
 	}
 
-	cursor := " "
-	if isSelected {
-		cursor = selectedStyle.Render(">")
-	}
 	resultStyle := lipgloss.NewStyle().Inline(true).MaxWidth(m.width)
 
+	arrow := "▸"
 	if fe.invalid {
 		// Invalid document - calculate available width for name
 		// Layout: "> F-XX  name INVALID"
-		return resultStyle.Render(fmt.Sprintf("%s %s  %s %s", cursor, style.Render(fe.entry.ID), errorStyle.Render(fe.entry.Name), invalidTag))
+		return resultStyle.Render(fmt.Sprintf(" %s %s  %s %s", arrow, dimStyle.Render(fe.entry.ID), errorStyle.Render(fe.entry.Name), invalidTag))
 	}
 
 	// Valid document
 	// Layout: ">▾ F-XX  name [0/0]"
-	arrow := "▸"
 	if fe.expanded {
 		arrow = "▾"
 	}
@@ -229,7 +274,12 @@ func (m sidebarModel) renderFeatureLine(idx int, item sidebarItem) string {
 	if fe.entry.Completed == fe.entry.Total && fe.entry.Total > 0 {
 		pStyle = completedStyle
 	}
-	return resultStyle.Render(fmt.Sprintf("%s%s %s  %s %s", cursor, arrow, style.Render(fe.entry.ID), style.Render(fe.entry.Name), pStyle.Render(progress)))
+
+	arrowStyle := dimStyle
+	if isSelected {
+		arrowStyle = selectedStyle
+	}
+	return resultStyle.Render(fmt.Sprintf(" %s %s  %s %s", arrowStyle.Render(arrow), style.Render(fe.entry.ID), style.Render(fe.entry.Name), pStyle.Render(progress)))
 }
 
 func (m sidebarModel) renderStoryLine(idx int, item sidebarItem) string {
@@ -244,7 +294,7 @@ func (m sidebarModel) renderStoryLine(idx int, item sidebarItem) string {
 
 	cursor := " "
 	if isSelected {
-		cursor = selectedStyle.Render(">")
+		cursor = selectedStyle.Render("▸")
 	}
 
 	status := checkboxUnchecked
@@ -259,7 +309,7 @@ func (m sidebarModel) renderStoryLine(idx int, item sidebarItem) string {
 		tag = " " + nextTag
 	}
 
-	content := fmt.Sprintf("%s   %s US-%d  %s%s", cursor, status, us.ID, style.Render(us.Name), tag)
+	content := fmt.Sprintf("  %s %s US-%d  %s%s", cursor, status, us.ID, style.Render(us.Name), tag)
 
 	resultStyle := lipgloss.NewStyle().Inline(true).MaxWidth(m.width)
 

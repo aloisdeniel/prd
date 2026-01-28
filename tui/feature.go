@@ -174,7 +174,7 @@ func (m featureDetailModel) renderStoryItem(idx int, us prd.UserStory, nextID in
 
 	cursor := "  "
 	if isSelected {
-		cursor = selectedStyle.Render("> ")
+		cursor = selectedStyle.Render("▸ ")
 	}
 
 	status := checkboxUnchecked
