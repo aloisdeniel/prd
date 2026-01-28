@@ -209,17 +209,12 @@ func (m sidebarModel) renderFeatureLine(idx int, item sidebarItem) string {
 	if isSelected {
 		cursor = selectedStyle.Render(">")
 	}
+	resultStyle := lipgloss.NewStyle().Inline(true).MaxWidth(m.width)
 
 	if fe.invalid {
 		// Invalid document - calculate available width for name
 		// Layout: "> F-XX  name INVALID"
-		fixedWidth := 3 + len(fe.entry.ID) + 2 + 1 + 7 // cursor + id + spaces + space + INVALID
-		maxNameWidth := m.width - fixedWidth
-		if maxNameWidth < 5 {
-			maxNameWidth = 5
-		}
-		name := truncate(fe.entry.Name, maxNameWidth)
-		return fmt.Sprintf("%s %s  %s %s", cursor, style.Render(fe.entry.ID), errorStyle.Render(name), invalidTag)
+		return resultStyle.Render(fmt.Sprintf("%s %s  %s %s", cursor, style.Render(fe.entry.ID), errorStyle.Render(fe.entry.Name), invalidTag))
 	}
 
 	// Valid document
@@ -229,18 +224,12 @@ func (m sidebarModel) renderFeatureLine(idx int, item sidebarItem) string {
 		arrow = "▾"
 	}
 	progress := fmt.Sprintf("[%d/%d]", fe.entry.Completed, fe.entry.Total)
-	fixedWidth := 1 + 1 + 1 + len(fe.entry.ID) + 2 + 1 + len(progress) // cursor + arrow + space + id + spaces + space + progress
-	maxNameWidth := m.width - fixedWidth
-	if maxNameWidth < 5 {
-		maxNameWidth = 5
-	}
 
 	pStyle := incompleteStyle
 	if fe.entry.Completed == fe.entry.Total && fe.entry.Total > 0 {
 		pStyle = completedStyle
 	}
-	name := truncate(fe.entry.Name, maxNameWidth)
-	return fmt.Sprintf("%s%s %s  %s %s", cursor, arrow, style.Render(fe.entry.ID), style.Render(name), pStyle.Render(progress))
+	return resultStyle.Render(fmt.Sprintf("%s%s %s  %s %s", cursor, arrow, style.Render(fe.entry.ID), style.Render(fe.entry.Name), pStyle.Render(progress)))
 }
 
 func (m sidebarModel) renderStoryLine(idx int, item sidebarItem) string {
@@ -266,20 +255,16 @@ func (m sidebarModel) renderStoryLine(idx int, item sidebarItem) string {
 	isNext := us.ID == nextStoryID(fe.feature.UserStories, fe.progress)
 	tag := ""
 	// Layout: ">   [x] US-XX  name NEXT"
-	fixedWidth := 1 + 3 + 3 + 1 + 4 + 2 // cursor + indent + checkbox + space + US-XX + spaces
 	if isNext {
 		tag = " " + nextTag
-		fixedWidth += 5 // " NEXT"
-	}
-	maxNameWidth := m.width - fixedWidth
-	if maxNameWidth < 5 {
-		maxNameWidth = 5
 	}
 
-	name := truncate(us.Name, maxNameWidth)
-	return fmt.Sprintf("%s   %s US-%d  %s%s", cursor, status, us.ID, style.Render(name), tag)
+	content := fmt.Sprintf("%s   %s US-%d  %s%s", cursor, status, us.ID, style.Render(us.Name), tag)
+
+	resultStyle := lipgloss.NewStyle().Inline(true).MaxWidth(m.width)
+
+	return resultStyle.Render(content)
 }
-
 
 func (m sidebarModel) selected() *sidebarItem {
 	if m.cursor >= 0 && m.cursor < len(m.items) {
