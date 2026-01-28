@@ -38,19 +38,22 @@ type screenState struct {
 }
 
 type Model struct {
-	stack         []screenState
-	featureList   featureListModel
-	featureDetail featureDetailModel
-	storyDetail   userStoryDetailModel
-	featureForm   featureFormModel
-	storyForm     userStoryFormModel
-	search        searchModel
-	sidebar       sidebarModel
-	wideMode      bool
-	width         int
-	height        int
-	basePath      string
-	err           error
+	stack          []screenState
+	featureList    featureListModel
+	featureDetail  featureDetailModel
+	storyDetail    userStoryDetailModel
+	featureForm    featureFormModel
+	storyForm      userStoryFormModel
+	search         searchModel
+	sidebar        sidebarModel
+	wideMode       bool
+	width          int
+	height         int
+	basePath       string
+	err            error
+	invalidErrors  []string // Errors for currently selected invalid entry
+	invalidName    string   // Name of currently selected invalid entry
+	invalidPath    string   // Path of currently selected invalid entry
 }
 
 func NewModel(basePath string) Model {
@@ -221,8 +224,12 @@ func (m Model) updateWide(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case key.Matches(msg, keys.Enter):
-			// If selected item is a story, open it in detail pane
+			// If selected item is invalid, do nothing (errors already shown)
 			sel := m.sidebar.selected()
+			if sel != nil && sel.invalid {
+				return m, nil
+			}
+			// If selected item is a story, open it in detail pane
 			if sel != nil && sel.isStory {
 				fe := m.sidebar.selectedFeatureEntry()
 				us := sel.feature.UserStories[sel.storyIdx]
@@ -295,6 +302,24 @@ func (m *Model) syncDetailFromSidebar() {
 	if sel == nil {
 		return
 	}
+
+	// Handle invalid entries - show errors in detail pane
+	if sel.invalid {
+		fe := m.sidebar.selectedFeatureEntry()
+		m.invalidErrors = sel.errors
+		if fe != nil {
+			m.invalidName = fe.entry.Name
+			m.invalidPath = fe.path
+		}
+		m.stack = []screenState{{screen: screenFeatureList}} // Use a neutral screen state
+		return
+	}
+
+	// Clear invalid state when selecting valid entry
+	m.invalidErrors = nil
+	m.invalidName = ""
+	m.invalidPath = ""
+
 	if sel.isStory {
 		// Don't auto-switch to story detail on cursor move; only on Enter
 		// Show the parent feature detail instead
@@ -323,7 +348,7 @@ func (m *Model) syncDetailFromSidebar() {
 
 func (m Model) handleWideNewStory() (tea.Model, tea.Cmd) {
 	fe := m.sidebar.selectedFeatureEntry()
-	if fe != nil && fe.path != "" {
+	if fe != nil && fe.path != "" && !fe.invalid {
 		m.storyForm = newUserStoryFormModel(fe.path)
 		m.push(screenUserStoryForm)
 		return m, m.storyForm.inputs[0].Focus()
@@ -545,13 +570,19 @@ func (m Model) viewWide() string {
 	detailWidth := max(m.width-sidebarWidth-1, 10)
 
 	var detailContent string
-	switch m.currentScreen() {
-	case screenFeatureDetail:
-		detailContent = sidebarTitleStyle.Render("Feature") + "\n\n" + m.featureDetail.View()
-	case screenUserStoryDetail:
-		detailContent = sidebarTitleStyle.Render("User Story") + "\n\n" + m.storyDetail.View()
-	default:
-		detailContent = dimStyle.PaddingLeft(2).Render("Select a feature to view details.")
+
+	// Check if we're showing an invalid entry
+	if len(m.invalidErrors) > 0 {
+		detailContent = m.viewInvalidDetail()
+	} else {
+		switch m.currentScreen() {
+		case screenFeatureDetail:
+			detailContent = sidebarTitleStyle.Render("Feature") + "\n\n" + m.featureDetail.View()
+		case screenUserStoryDetail:
+			detailContent = sidebarTitleStyle.Render("User Story") + "\n\n" + m.storyDetail.View()
+		default:
+			detailContent = dimStyle.PaddingLeft(2).Render("Select a feature to view details.")
+		}
 	}
 
 	sidebarPane := lipgloss.NewStyle().
@@ -570,6 +601,34 @@ func (m Model) viewWide() string {
 		Render(detailContent)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, sidebarPane, separator, detailPane)
+}
+
+func (m Model) viewInvalidDetail() string {
+	var b strings.Builder
+
+	b.WriteString(sidebarTitleStyle.Render("Invalid Document"))
+	b.WriteString("\n\n")
+
+	if m.invalidName != "" {
+		b.WriteString(titleStyle.Render(m.invalidName))
+		b.WriteString("\n")
+	}
+
+	if m.invalidPath != "" {
+		b.WriteString(dimStyle.Render(m.invalidPath))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(sectionStyle.Render("Errors"))
+	b.WriteString("\n\n")
+
+	for _, err := range m.invalidErrors {
+		b.WriteString(errorStyle.Render("• " + err))
+		b.WriteString("\n")
+	}
+
+	return b.String()
 }
 
 func (m Model) currentStatusHelp() string {

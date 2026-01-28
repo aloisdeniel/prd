@@ -65,7 +65,13 @@ var (
 			Foreground(lipgloss.Color("0")).
 			Background(lipgloss.Color("213"))
 
-	nextTag = nextTagStyle.Render("NEXT")
+	invalidTagStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("0")).
+			Background(lipgloss.Color("203"))
+
+	nextTag    = nextTagStyle.Render("NEXT")
+	invalidTag = invalidTagStyle.Render("INVALID")
 
 	checkboxChecked = completedStyle.Render("[x]")
 	checkboxUnchecked = incompleteStyle.Render("[ ]")

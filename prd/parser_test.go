@@ -207,11 +207,44 @@ func TestValidateMissingFunctionalRequirements(t *testing.T) {
 	}
 }
 
-func TestValidateNonSequentialIDs(t *testing.T) {
+func TestValidateNonSequentialIDsAllowed(t *testing.T) {
+	// Non-sequential IDs should be allowed as long as they're unique
 	f, _ := Parse("# Title\n\n## Goals\n\nGoals\n\n## User Stories\n\n### US-3 | P1 | Story\n\n#### Acceptance Criteria\n\n- [ ] Done\n\n## Functional Requirements\n\nReqs\n")
 	errs := Validate(f)
-	if !hasError(errs, "UserStories[0].ID") {
-		t.Errorf("expected ID error, got %v", errs)
+	if hasError(errs, "UserStories[0].ID") {
+		t.Errorf("non-sequential IDs should be allowed, got %v", errs)
+	}
+}
+
+func TestValidateDuplicateIDs(t *testing.T) {
+	f := Feature{
+		Name:                   "Test",
+		Goals:                  "Goals",
+		FunctionalRequirements: "Reqs",
+		UserStories: []UserStory{
+			{ID: 1, Priority: 1, Name: "Story 1", AcceptanceCriteria: []AcceptanceCriterion{{Text: "Done"}}},
+			{ID: 1, Priority: 2, Name: "Story 2", AcceptanceCriteria: []AcceptanceCriterion{{Text: "Done"}}},
+		},
+	}
+	errs := Validate(f)
+	if !hasError(errs, "UserStories[1].ID") {
+		t.Errorf("expected duplicate ID error, got %v", errs)
+	}
+}
+
+func TestValidateMaxUserStories(t *testing.T) {
+	f := Feature{
+		Name:                   "Test",
+		Goals:                  "Goals",
+		FunctionalRequirements: "Reqs",
+		UserStories:            make([]UserStory, 100),
+	}
+	for i := range f.UserStories {
+		f.UserStories[i] = UserStory{ID: i + 1, Priority: 3, Name: "Story", AcceptanceCriteria: []AcceptanceCriterion{{Text: "Done"}}}
+	}
+	errs := Validate(f)
+	if !hasError(errs, "UserStories") {
+		t.Errorf("expected max user stories error, got %v", errs)
 	}
 }
 

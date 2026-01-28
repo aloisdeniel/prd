@@ -42,6 +42,7 @@ type FeatureEntry struct {
 	Path      string
 	Completed int
 	Total     int
+	Errors    []string // Parse or validation errors (empty if valid)
 }
 
 // Note represents a dated note entry.

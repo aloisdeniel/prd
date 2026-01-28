@@ -19,7 +19,9 @@ type sidebarItem struct {
 	storyIdx  int
 	progress  map[int]bool
 	expanded  bool
-	entryIdx  int // index into allFeats
+	entryIdx  int      // index into allFeats
+	invalid   bool     // True if the document has errors
+	errors    []string // Parse or validation errors
 }
 
 type sidebarEntry struct {
@@ -28,6 +30,8 @@ type sidebarEntry struct {
 	progress map[int]bool
 	expanded bool
 	path     string
+	invalid  bool     // True if the document has errors
+	errors   []string // Parse or validation errors
 }
 
 type sidebarModel struct {
@@ -55,6 +59,17 @@ func (m sidebarModel) loadAll() tea.Msg {
 	}
 	var result []sidebarEntry
 	for _, e := range entries {
+		// Check if entry has errors (invalid document)
+		if len(e.Errors) > 0 {
+			result = append(result, sidebarEntry{
+				entry:   e,
+				path:    e.Path,
+				invalid: true,
+				errors:  e.Errors,
+			})
+			continue
+		}
+
 		path, feature, err := prd.LoadFeature(m.basePath, e.ID)
 		if err != nil {
 			continue
@@ -81,8 +96,10 @@ func (m *sidebarModel) rebuildItems() {
 			progress:  fe.progress,
 			expanded:  fe.expanded,
 			entryIdx:  i,
+			invalid:   fe.invalid,
+			errors:    fe.errors,
 		})
-		if fe.expanded {
+		if fe.expanded && fe.feature != nil {
 			for si := range fe.feature.UserStories {
 				m.items = append(m.items, sidebarItem{
 					isStory:   true,
@@ -133,13 +150,13 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 				m.cursor++
 			}
 		case key.Matches(msg, keys.Space):
-			if len(m.items) > 0 && !m.items[m.cursor].isStory {
+			if len(m.items) > 0 && !m.items[m.cursor].isStory && !m.items[m.cursor].invalid {
 				idx := m.items[m.cursor].entryIdx
 				m.allFeats[idx].expanded = !m.allFeats[idx].expanded
 				m.rebuildItems()
 			}
 		case key.Matches(msg, keys.Enter):
-			if len(m.items) > 0 && !m.items[m.cursor].isStory {
+			if len(m.items) > 0 && !m.items[m.cursor].isStory && !m.items[m.cursor].invalid {
 				idx := m.items[m.cursor].entryIdx
 				m.allFeats[idx].expanded = !m.allFeats[idx].expanded
 				m.rebuildItems()
@@ -177,19 +194,28 @@ func (m sidebarModel) View() string {
 
 		if !item.isStory {
 			// Feature row
-			arrow := "▸"
-			if item.expanded {
-				arrow = "▾"
-			}
 			fe := m.allFeats[item.entryIdx]
-			progress := fmt.Sprintf("[%d/%d]", fe.entry.Completed, fe.entry.Total)
-			pStyle := incompleteStyle
-			if fe.entry.Completed == fe.entry.Total && fe.entry.Total > 0 {
-				pStyle = completedStyle
+
+			if item.invalid {
+				// Invalid document - show with INVALID tag
+				name := truncate(fe.entry.Name, sidebarWidth-20)
+				line := fmt.Sprintf("%s  %s  %s %s", cursor, style.Render(fe.entry.ID), errorStyle.Render(name), invalidTag)
+				b.WriteString(line + "\n")
+			} else {
+				// Valid document
+				arrow := "▸"
+				if item.expanded {
+					arrow = "▾"
+				}
+				progress := fmt.Sprintf("[%d/%d]", fe.entry.Completed, fe.entry.Total)
+				pStyle := incompleteStyle
+				if fe.entry.Completed == fe.entry.Total && fe.entry.Total > 0 {
+					pStyle = completedStyle
+				}
+				name := truncate(fe.entry.Name, sidebarWidth-16)
+				line := fmt.Sprintf("%s%s %s  %s %s", cursor, arrow, style.Render(fe.entry.ID), style.Render(name), pStyle.Render(progress))
+				b.WriteString(line + "\n")
 			}
-			name := truncate(fe.entry.Name, sidebarWidth-16)
-			line := fmt.Sprintf("%s%s %s  %s %s", cursor, arrow, style.Render(fe.entry.ID), style.Render(name), pStyle.Render(progress))
-			b.WriteString(line + "\n")
 		} else {
 			// User story row
 			us := item.feature.UserStories[item.storyIdx]

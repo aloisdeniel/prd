@@ -86,6 +86,7 @@ func ensureProgress(prdPath string, feature *Feature) error {
 }
 
 // ListFeatures returns all features found under basePath.
+// Invalid documents are included with their parse/validation errors.
 func ListFeatures(basePath string) ([]FeatureEntry, error) {
 	matches, err := filepath.Glob(filepath.Join(basePath, "*", "prd.md"))
 	if err != nil {
@@ -105,16 +106,50 @@ func ListFeatures(basePath string) ([]FeatureEntry, error) {
 
 		content, err := os.ReadFile(path)
 		if err != nil {
+			// File couldn't be read - include as invalid entry
+			entries = append(entries, FeatureEntry{
+				ID:     id,
+				Name:   name,
+				Path:   path,
+				Errors: []string{fmt.Sprintf("failed to read file: %v", err)},
+			})
 			continue
 		}
+
 		feature, err := Parse(string(content))
 		if err != nil {
+			// Parse error - include as invalid entry
+			entries = append(entries, FeatureEntry{
+				ID:     id,
+				Name:   name,
+				Path:   path,
+				Errors: []string{fmt.Sprintf("parse error: %v", err)},
+			})
 			continue
 		}
+
+		// Check for validation errors
+		validationErrs := Validate(feature)
 
 		displayName := feature.Name
 		if displayName == "" {
 			displayName = name
+		}
+
+		if len(validationErrs) > 0 {
+			// Validation errors - include with errors
+			var errStrs []string
+			for _, ve := range validationErrs {
+				errStrs = append(errStrs, ve.Error())
+			}
+			entries = append(entries, FeatureEntry{
+				ID:     id,
+				Name:   displayName,
+				Path:   path,
+				Total:  len(feature.UserStories),
+				Errors: errStrs,
+			})
+			continue
 		}
 
 		progress, _ := LoadProgress(path)
@@ -210,6 +245,7 @@ func CreateFeature(basePath, name, desc string, allSections bool) (string, error
 
 // CreateUserStory appends a new user story to the PRD file.
 // Priority should be 1-5 (use 0 to default to P3).
+// User story IDs default to (feature_id * 100) + N, where N is 1-99.
 func CreateUserStory(prdPath, name, desc string, criteria []string, techConsider string, priority int) error {
 	if priority < 1 || priority > 5 {
 		priority = 3
@@ -224,11 +260,23 @@ func CreateUserStory(prdPath, name, desc string, criteria []string, techConsider
 		return err
 	}
 
-	nextID := 1
+	// Extract feature ID from path (e.g., "prd/1-feature-name/prd.md" -> 1)
+	dir := filepath.Base(filepath.Dir(prdPath))
+	parts := strings.SplitN(dir, "-", 2)
+	featureID, _ := strconv.Atoi(parts[0])
+	baseID := featureID * 100
+
+	// Find next available ID starting from baseID + 1
+	nextID := baseID + 1
 	for _, us := range feature.UserStories {
 		if us.ID >= nextID {
 			nextID = us.ID + 1
 		}
+	}
+
+	// Check we haven't exceeded 99 user stories for this feature
+	if nextID > baseID+99 {
+		return fmt.Errorf("cannot create user story: feature %d already has maximum 99 user stories", featureID)
 	}
 
 	var sb strings.Builder

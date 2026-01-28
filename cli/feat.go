@@ -193,6 +193,15 @@ func runFeatList() error {
 	}
 
 	for _, e := range entries {
+		// Check if this entry has errors (invalid document)
+		if len(e.Errors) > 0 {
+			fmt.Printf("%s  %s  [INVALID]\n", e.ID, e.Name)
+			for _, errStr := range e.Errors {
+				fmt.Printf("  • %s\n", errStr)
+			}
+			continue
+		}
+
 		fmt.Printf("%s  %s  [%d/%d]\n", e.ID, e.Name, e.Completed, e.Total)
 
 		_, feature, err := prd.LoadFeature("prd", e.ID)

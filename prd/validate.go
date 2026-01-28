@@ -28,15 +28,22 @@ func Validate(f Feature) []ValidationError {
 		errs = append(errs, ValidationError{Field: "UserStories", Message: "at least one user story is required"})
 	}
 
+	if len(f.UserStories) > 99 {
+		errs = append(errs, ValidationError{Field: "UserStories", Message: fmt.Sprintf("maximum 99 user stories allowed, got %d", len(f.UserStories))})
+	}
+
+	// Check for duplicate user story IDs
+	seenIDs := make(map[int]int) // ID -> first index where it appeared
 	for i, us := range f.UserStories {
 		prefix := fmt.Sprintf("UserStories[%d]", i)
 
-		expectedID := i + 1
-		if us.ID != expectedID {
+		if firstIdx, exists := seenIDs[us.ID]; exists {
 			errs = append(errs, ValidationError{
 				Field:   prefix + ".ID",
-				Message: fmt.Sprintf("expected US-%d but got US-%d", expectedID, us.ID),
+				Message: fmt.Sprintf("duplicate ID US-%d (first seen at index %d)", us.ID, firstIdx),
 			})
+		} else {
+			seenIDs[us.ID] = i
 		}
 
 		if us.Priority < 1 || us.Priority > 5 {
