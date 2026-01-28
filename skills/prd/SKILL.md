@@ -1,6 +1,6 @@
 ---
 name: prd
-description: "A CLI tool to manage Product Requirements Documents (PRDs) with features, user stories, and acceptance criteria."
+description: "A CLI tool to manage Product Requirements Documents (PRDs) with features, user stories, and acceptance criteria. Triggers on: prd, product requirements, feature management, feature, user story."
 ---
 
 	# PRD — Product Requirements Document Manager
