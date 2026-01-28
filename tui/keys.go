@@ -18,6 +18,8 @@ type keyMap struct {
 	Search     key.Binding
 	Tab        key.Binding
 	Delete     key.Binding
+	ScrollUp   key.Binding
+	ScrollDown key.Binding
 }
 
 var keys = keyMap{
@@ -80,5 +82,13 @@ var keys = keyMap{
 	Delete: key.NewBinding(
 		key.WithKeys("d"),
 		key.WithHelp("d", "delete"),
+	),
+	ScrollUp: key.NewBinding(
+		key.WithKeys("ctrl+u"),
+		key.WithHelp("ctrl+u", "scroll up"),
+	),
+	ScrollDown: key.NewBinding(
+		key.WithKeys("ctrl+d"),
+		key.WithHelp("ctrl+d", "scroll down"),
 	),
 }

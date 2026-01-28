@@ -12,15 +12,16 @@ import (
 )
 
 type featureDetailModel struct {
-	feature  *prd.Feature
-	path     string
-	id       string
-	progress map[int]bool
-	cursor   int
-	width    int
-	height   int
-	err      error
-	basePath string
+	feature      *prd.Feature
+	path         string
+	id           string
+	progress     map[int]bool
+	cursor       int
+	scrollOffset int
+	width        int
+	height       int
+	err          error
+	basePath     string
 }
 
 func newFeatureDetailModel(basePath, id string) featureDetailModel {
@@ -71,9 +72,23 @@ func (m featureDetailModel) Update(msg tea.Msg) (featureDetailModel, tea.Cmd) {
 			if m.cursor < len(m.feature.UserStories)-1 {
 				m.cursor++
 			}
+		case key.Matches(msg, keys.ScrollUp):
+			m.scrollOffset -= m.scrollAmount()
+			if m.scrollOffset < 0 {
+				m.scrollOffset = 0
+			}
+		case key.Matches(msg, keys.ScrollDown):
+			m.scrollOffset += m.scrollAmount()
 		}
 	}
 	return m, nil
+}
+
+func (m featureDetailModel) scrollAmount() int {
+	if m.height > 4 {
+		return m.height / 2
+	}
+	return 5
 }
 
 func (m featureDetailModel) View() string {
@@ -96,47 +111,123 @@ func (m featureDetailModel) View() string {
 		b.WriteString("\n")
 	}
 
+	// User Stories section (always first)
 	b.WriteString("\n")
-	b.WriteString(subtitleStyle.Render("User Stories"))
+	b.WriteString(sectionStyle.Render("User Stories"))
 	b.WriteString("\n\n")
 
 	if len(m.feature.UserStories) == 0 {
 		b.WriteString(dimStyle.PaddingLeft(2).Render("No user stories. Press 'n' to create one."))
-		return b.String()
+	} else {
+		nextID := nextStoryID(m.feature.UserStories, m.progress)
+
+		for i, us := range m.feature.UserStories {
+			cursor := "  "
+			style := normalStyle
+			if i == m.cursor {
+				cursor = selectedStyle.Render("> ")
+				style = selectedStyle
+			}
+
+			status := checkboxUnchecked
+			if m.progress[us.ID] {
+				status = checkboxChecked
+			}
+
+			tag := ""
+			if us.ID == nextID {
+				tag = " " + nextTag
+			}
+
+			line := fmt.Sprintf("%s%s %s US-%d  %s%s",
+				cursor,
+				status,
+				renderPriority(us.Priority),
+				us.ID,
+				style.Render(us.Name),
+				tag,
+			)
+			b.WriteString(line + "\n")
+		}
 	}
 
-	nextID := nextStoryID(m.feature.UserStories, m.progress)
+	// Other sections
+	m.renderSection(&b, "Goals", m.feature.Goals)
+	m.renderSection(&b, "Functional Requirements", m.feature.FunctionalRequirements)
+	m.renderSection(&b, "Non-Goals", m.feature.NonGoals)
+	m.renderSection(&b, "Technical Considerations", m.feature.TechnicalConsiderations)
+	m.renderSection(&b, "Analytics", m.feature.Analytics)
+	m.renderSection(&b, "Risks", m.feature.Risks)
+	m.renderSection(&b, "Success Metrics", m.feature.SuccessMetrics)
+	m.renderSection(&b, "Open Questions", m.feature.OpenQuestions)
+	m.renderNotes(&b)
 
-	for i, us := range m.feature.UserStories {
-		cursor := "  "
-		style := normalStyle
-		if i == m.cursor {
-			cursor = selectedStyle.Render("> ")
-			style = selectedStyle
-		}
+	return m.applyScroll(b.String())
+}
 
-		status := checkboxUnchecked
-		if m.progress[us.ID] {
-			status = checkboxChecked
-		}
+func (m featureDetailModel) applyScroll(content string) string {
+	lines := strings.Split(content, "\n")
+	totalLines := len(lines)
 
-		tag := ""
-		if us.ID == nextID {
-			tag = " " + nextTag
-		}
-
-		line := fmt.Sprintf("%s%s %s US-%d  %s%s",
-			cursor,
-			status,
-			renderPriority(us.Priority),
-			us.ID,
-			style.Render(us.Name),
-			tag,
-		)
-		b.WriteString(line + "\n")
+	// Clamp scroll offset
+	maxOffset := totalLines - m.height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	offset := m.scrollOffset
+	if offset > maxOffset {
+		offset = maxOffset
 	}
 
-	return b.String()
+	// Calculate visible range
+	start := offset
+	end := offset + m.height
+	if end > totalLines {
+		end = totalLines
+	}
+
+	if start >= totalLines {
+		return ""
+	}
+
+	return strings.Join(lines[start:end], "\n")
+}
+
+func (m featureDetailModel) renderSection(b *strings.Builder, title, content string) {
+	if content == "" {
+		return
+	}
+	b.WriteString("\n")
+	b.WriteString(sectionStyle.Render(title))
+	b.WriteString("\n\n")
+	// Truncate long content for display
+	display := content
+	if len(display) > 300 {
+		display = display[:300] + "..."
+	}
+	b.WriteString(dimStyle.PaddingLeft(2).Render(display))
+	b.WriteString("\n")
+}
+
+func (m featureDetailModel) renderNotes(b *strings.Builder) {
+	if len(m.feature.Notes) == 0 {
+		return
+	}
+	b.WriteString("\n")
+	b.WriteString(sectionStyle.Render("Notes"))
+	b.WriteString("\n\n")
+	for _, note := range m.feature.Notes {
+		dateStr := ""
+		if note.Date != "" {
+			dateStr = note.Date + ": "
+		}
+		content := note.Content
+		if len(content) > 100 {
+			content = content[:100] + "..."
+		}
+		b.WriteString(dimStyle.PaddingLeft(2).Render(dateStr + content))
+		b.WriteString("\n")
+	}
 }
 
 func (m featureDetailModel) selectedStory() *prd.UserStory {
@@ -159,6 +250,6 @@ func nextStoryID(stories []prd.UserStory, progress map[int]bool) int {
 }
 
 func (m featureDetailModel) statusHelp() string {
-	parts := []string{"j/k navigate", "enter open", "u/n new story", "d delete", "esc back"}
+	parts := []string{"j/k navigate", "ctrl+u/d scroll", "enter open", "u/n new story", "d delete", "esc back"}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Join(parts, "  "))
 }

@@ -12,14 +12,15 @@ import (
 )
 
 type userStoryDetailModel struct {
-	story     *prd.UserStory
-	path      string
-	completed bool
-	width     int
-	height    int
-	err       error
-	basePath  string
-	featID    string
+	story        *prd.UserStory
+	path         string
+	completed    bool
+	scrollOffset int
+	width        int
+	height       int
+	err          error
+	basePath     string
+	featID       string
 }
 
 func newUserStoryDetailModel(basePath, featID, path string, story *prd.UserStory, completed bool) userStoryDetailModel {
@@ -70,9 +71,23 @@ func (m userStoryDetailModel) Update(msg tea.Msg) (userStoryDetailModel, tea.Cmd
 				return m, nil
 			}
 			return m, m.reloadStory
+		case key.Matches(msg, keys.ScrollUp):
+			m.scrollOffset -= m.scrollAmount()
+			if m.scrollOffset < 0 {
+				m.scrollOffset = 0
+			}
+		case key.Matches(msg, keys.ScrollDown):
+			m.scrollOffset += m.scrollAmount()
 		}
 	}
 	return m, nil
+}
+
+func (m userStoryDetailModel) scrollAmount() int {
+	if m.height > 4 {
+		return m.height / 2
+	}
+	return 5
 }
 
 func (m userStoryDetailModel) View() string {
@@ -122,10 +137,38 @@ func (m userStoryDetailModel) View() string {
 		b.WriteString(errorStyle.Render(m.err.Error()))
 	}
 
-	return b.String()
+	return m.applyScroll(b.String())
+}
+
+func (m userStoryDetailModel) applyScroll(content string) string {
+	lines := strings.Split(content, "\n")
+	totalLines := len(lines)
+
+	// Clamp scroll offset
+	maxOffset := totalLines - m.height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	offset := m.scrollOffset
+	if offset > maxOffset {
+		offset = maxOffset
+	}
+
+	// Calculate visible range
+	start := offset
+	end := offset + m.height
+	if end > totalLines {
+		end = totalLines
+	}
+
+	if start >= totalLines {
+		return ""
+	}
+
+	return strings.Join(lines[start:end], "\n")
 }
 
 func (m userStoryDetailModel) statusHelp() string {
-	parts := []string{"c toggle complete", "esc back"}
+	parts := []string{"ctrl+u/d scroll", "c toggle complete", "esc back"}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Join(parts, "  "))
 }

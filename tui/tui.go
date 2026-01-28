@@ -207,6 +207,19 @@ func (m Model) updateWide(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.search.input.Focus()
 		case key.Matches(msg, keys.Complete):
 			return m.handleWideComplete(msg)
+		case key.Matches(msg, keys.ScrollUp), key.Matches(msg, keys.ScrollDown):
+			// Forward scroll keys to the detail panel
+			cur := m.currentScreen()
+			if cur == screenFeatureDetail {
+				var cmd tea.Cmd
+				m.featureDetail, cmd = m.featureDetail.Update(msg)
+				return m, cmd
+			} else if cur == screenUserStoryDetail {
+				var cmd tea.Cmd
+				m.storyDetail, cmd = m.storyDetail.Update(msg)
+				return m, cmd
+			}
+			return m, nil
 		case key.Matches(msg, keys.Enter):
 			// If selected item is a story, open it in detail pane
 			sel := m.sidebar.selected()
@@ -215,6 +228,7 @@ func (m Model) updateWide(msg tea.Msg) (tea.Model, tea.Cmd) {
 				us := sel.feature.UserStories[sel.storyIdx]
 				completed := sel.progress[us.ID]
 				m.storyDetail = newUserStoryDetailModel(m.basePath, sel.featureID, fe.path, &us, completed)
+				m.storyDetail.height = m.detailPanelHeight()
 				// Set stack to story detail so View knows what to render
 				m.stack = []screenState{{screen: screenUserStoryDetail}}
 				return m, nil
@@ -271,6 +285,11 @@ func (m *Model) selectInSidebar(featureID string, isStory bool, storyID int) {
 	}
 }
 
+func (m *Model) detailPanelHeight() int {
+	// Account for title line and spacing in viewWide
+	return m.height - 4
+}
+
 func (m *Model) syncDetailFromSidebar() {
 	sel := m.sidebar.selected()
 	if sel == nil {
@@ -286,6 +305,7 @@ func (m *Model) syncDetailFromSidebar() {
 			m.featureDetail.path = fe.path
 			m.featureDetail.progress = fe.progress
 			m.featureDetail.cursor = sel.storyIdx
+			m.featureDetail.height = m.detailPanelHeight()
 			m.stack = []screenState{{screen: screenFeatureDetail}}
 		}
 	} else {
@@ -295,6 +315,7 @@ func (m *Model) syncDetailFromSidebar() {
 			m.featureDetail.feature = fe.feature
 			m.featureDetail.path = fe.path
 			m.featureDetail.progress = fe.progress
+			m.featureDetail.height = m.detailPanelHeight()
 			m.stack = []screenState{{screen: screenFeatureDetail}}
 		}
 	}
@@ -591,7 +612,7 @@ func (m Model) currentStatusHelp() string {
 }
 
 func (m Model) wideStatusHelp() string {
-	parts := []string{"j/k navigate", "enter open/toggle", "space expand", "f new feature", "u/n new story", "d delete", "/ search", "c complete", "q quit"}
+	parts := []string{"j/k navigate", "ctrl+u/d scroll", "enter open/toggle", "space expand", "f new feature", "u/n new story", "d delete", "/ search", "c complete", "q quit"}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Join(parts, "  "))
 }
 

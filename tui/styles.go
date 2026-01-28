@@ -16,6 +16,11 @@ var (
 			Foreground(lipgloss.Color("241")).
 			PaddingLeft(1)
 
+	sectionStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("81")).
+			PaddingLeft(1)
+
 	selectedStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("170")).
 			Bold(true)
