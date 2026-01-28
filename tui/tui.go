@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -264,9 +263,9 @@ func (m Model) updateWide(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			// Navigation keys go to sidebar
 			var cmd tea.Cmd
-			oldCursor := m.sidebar.cursor()
+			oldCursor := m.sidebar.cursorPos()
 			m.sidebar, cmd = m.sidebar.Update(msg)
-			if m.sidebar.cursor() != oldCursor {
+			if m.sidebar.cursorPos() != oldCursor {
 				m.syncDetailFromSidebar()
 			}
 			return m, cmd
@@ -281,19 +280,15 @@ func (m *Model) selectInSidebar(featureID string, isStory bool, storyID int) {
 		if fe.entry.ID == featureID {
 			m.sidebar.allFeats[i].expanded = true
 			m.sidebar.rebuildItems()
-			for j, listItem := range m.sidebar.list.Items() {
-				item, ok := listItem.(sidebarItem)
-				if !ok {
-					continue
-				}
+			for j, item := range m.sidebar.items {
 				if isStory {
 					if item.isStory && item.featureID == featureID && item.feature.UserStories[item.storyIdx].ID == storyID {
-						m.sidebar.list.Select(j)
+						m.sidebar.cursor = j
 						return
 					}
 				} else {
 					if !item.isStory && item.featureID == featureID {
-						m.sidebar.list.Select(j)
+						m.sidebar.cursor = j
 						return
 					}
 				}
@@ -581,14 +576,7 @@ func (m Model) View() string {
 		content += "\n" + errorStyle.Render(m.err.Error())
 	}
 
-	// Layout: content + status bar at bottom
-	availHeight := m.height - 1
-	contentLines := strings.Count(content, "\n")
-	if contentLines < availHeight {
-		content += strings.Repeat("\n", availHeight-contentLines)
-	}
-
-	return fmt.Sprintf("%s\n%s", content, statusBar)
+	return lipgloss.JoinVertical(lipgloss.Left, content, statusBar)
 }
 
 func (m Model) viewWide() string {
@@ -615,19 +603,20 @@ func (m Model) viewWide() string {
 		}
 	}
 
+	contentHeight := m.height - 2 // Leave room for status bar
+
 	sidebarPane := lipgloss.NewStyle().
 		Width(sidebarWidth).
-		Height(m.height - 1).
+		MaxHeight(contentHeight).
 		Render(sidebarContent)
 
 	separator := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241")).
-		Height(m.height - 1).
-		Render(strings.Repeat("│\n", m.height-2) + "│")
+		Render(strings.Repeat("│\n", contentHeight-1) + "│")
 
 	detailPane := lipgloss.NewStyle().
 		Width(detailWidth).
-		Height(m.height - 1).
+		MaxHeight(contentHeight).
 		Render(detailContent)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, sidebarPane, separator, detailPane)

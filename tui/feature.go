@@ -2,11 +2,12 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/list"
 
 	"github.com/aloisdeniel/prd/prd"
 )
@@ -115,109 +116,129 @@ func (m featureDetailModel) renderContent() string {
 		return ""
 	}
 
-	var b strings.Builder
+	var sections []string
 
-	b.WriteString(titleStyle.Render(m.feature.Name))
-	b.WriteString("\n\n")
+	// Title with bottom margin
+	sections = append(sections, lipgloss.NewStyle().MarginBottom(1).Render(titleStyle.Render(m.feature.Name)))
 
+	// Description
 	if m.feature.Description != "" {
-		desc := m.feature.Description
-		if len(desc) > 200 {
-			desc = desc[:200] + "..."
-		}
-		b.WriteString(subtitleStyle.Render(desc))
-		b.WriteString("\n")
+		desc := lipgloss.NewStyle().MaxWidth(m.width - 4).Render(m.feature.Description)
+		sections = append(sections, subtitleStyle.Render(desc))
 	}
 
-	// User Stories section (always first)
-	b.WriteString("\n")
-	b.WriteString(sectionStyle.Render("User Stories"))
-	b.WriteString("\n\n")
+	// User Stories section with top margin
+	sectionHeaderStyle := sectionStyle.MarginTop(1)
+	sections = append(sections, sectionHeaderStyle.Render("User Stories"))
 
 	if len(m.feature.UserStories) == 0 {
-		b.WriteString(dimStyle.PaddingLeft(2).Render("No user stories. Press 'n' to create one."))
+		sections = append(sections, dimStyle.PaddingLeft(2).Render("No user stories. Press 'n' to create one."))
 	} else {
-		nextID := nextStoryID(m.feature.UserStories, m.progress)
-
-		for i, us := range m.feature.UserStories {
-			cursor := "  "
-			style := normalStyle
-			if i == m.cursor {
-				cursor = selectedStyle.Render("> ")
-				style = selectedStyle
-			}
-
-			status := checkboxUnchecked
-			if m.progress[us.ID] {
-				status = checkboxChecked
-			}
-
-			tag := ""
-			if us.ID == nextID {
-				tag = " " + nextTag
-			}
-
-			line := fmt.Sprintf("%s%s %s US-%d  %s%s",
-				cursor,
-				status,
-				renderPriority(us.Priority),
-				us.ID,
-				style.Render(us.Name),
-				tag,
-			)
-			b.WriteString(line + "\n")
-		}
+		sections = append(sections, m.renderUserStoriesList())
 	}
 
 	// Other sections
-	m.renderSection(&b, "Goals", m.feature.Goals)
-	m.renderSection(&b, "Functional Requirements", m.feature.FunctionalRequirements)
-	m.renderSection(&b, "Non-Goals", m.feature.NonGoals)
-	m.renderSection(&b, "Technical Considerations", m.feature.TechnicalConsiderations)
-	m.renderSection(&b, "Analytics", m.feature.Analytics)
-	m.renderSection(&b, "Risks", m.feature.Risks)
-	m.renderSection(&b, "Success Metrics", m.feature.SuccessMetrics)
-	m.renderSection(&b, "Open Questions", m.feature.OpenQuestions)
-	m.renderNotes(&b)
+	sections = append(sections, m.renderTextSection("Goals", m.feature.Goals)...)
+	sections = append(sections, m.renderTextSection("Functional Requirements", m.feature.FunctionalRequirements)...)
+	sections = append(sections, m.renderTextSection("Non-Goals", m.feature.NonGoals)...)
+	sections = append(sections, m.renderTextSection("Technical Considerations", m.feature.TechnicalConsiderations)...)
+	sections = append(sections, m.renderTextSection("Analytics", m.feature.Analytics)...)
+	sections = append(sections, m.renderTextSection("Risks", m.feature.Risks)...)
+	sections = append(sections, m.renderTextSection("Success Metrics", m.feature.SuccessMetrics)...)
+	sections = append(sections, m.renderTextSection("Open Questions", m.feature.OpenQuestions)...)
+	sections = append(sections, m.renderNotesSection()...)
 
-	return b.String()
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 
-func (m featureDetailModel) renderSection(b *strings.Builder, title, content string) {
+func (m featureDetailModel) renderUserStoriesList() string {
+	nextID := nextStoryID(m.feature.UserStories, m.progress)
+
+	// Build list items
+	l := list.New().
+		Enumerator(func(_ list.Items, _ int) string { return "" })
+
+	for i, us := range m.feature.UserStories {
+		l.Item(m.renderStoryItem(i, us, nextID))
+	}
+
+	return l.String()
+}
+
+func (m featureDetailModel) renderStoryItem(idx int, us prd.UserStory, nextID int) string {
+	isSelected := idx == m.cursor
+	style := normalStyle
+	if isSelected {
+		style = selectedStyle
+	}
+
+	cursor := "  "
+	if isSelected {
+		cursor = selectedStyle.Render("> ")
+	}
+
+	status := checkboxUnchecked
+	if m.progress[us.ID] {
+		status = checkboxChecked
+	}
+
+	tag := ""
+	// Layout: "> [x] P1 US-XX  name NEXT"
+	fixedWidth := 2 + 3 + 1 + 2 + 1 + 5 + 2 // cursor + checkbox + space + priority + space + US-XX + spaces
+	if us.ID == nextID {
+		tag = " " + nextTag
+		fixedWidth += 5
+	}
+	maxNameWidth := m.width - fixedWidth
+	if maxNameWidth < 10 {
+		maxNameWidth = 10
+	}
+
+	name := truncate(us.Name, maxNameWidth)
+	return fmt.Sprintf("%s%s %s US-%d  %s%s", cursor, status, renderPriority(us.Priority), us.ID, style.Render(name), tag)
+}
+
+func (m featureDetailModel) renderTextSection(title, content string) []string {
 	if content == "" {
-		return
+		return nil
 	}
-	b.WriteString("\n")
-	b.WriteString(sectionStyle.Render(title))
-	b.WriteString("\n\n")
-	// Truncate long content for display
-	display := content
-	if len(display) > 300 {
-		display = display[:300] + "..."
+
+	// Section header with top margin
+	headerStyle := sectionStyle.MarginTop(1)
+	// Content with proper width
+	contentStyle := dimStyle.PaddingLeft(2).MaxWidth(m.width - 4)
+
+	return []string{
+		headerStyle.Render(title),
+		contentStyle.Render(content),
 	}
-	b.WriteString(dimStyle.PaddingLeft(2).Render(display))
-	b.WriteString("\n")
 }
 
-func (m featureDetailModel) renderNotes(b *strings.Builder) {
+func (m featureDetailModel) renderNotesSection() []string {
 	if len(m.feature.Notes) == 0 {
-		return
+		return nil
 	}
-	b.WriteString("\n")
-	b.WriteString(sectionStyle.Render("Notes"))
-	b.WriteString("\n\n")
+
+	// Section header with top margin
+	headerStyle := sectionStyle.MarginTop(1)
+	result := []string{headerStyle.Render("Notes")}
+
+	// Build notes as a list
+	l := list.New().
+		EnumeratorStyle(dimStyle).
+		ItemStyle(dimStyle)
+
 	for _, note := range m.feature.Notes {
 		dateStr := ""
 		if note.Date != "" {
 			dateStr = note.Date + ": "
 		}
-		content := note.Content
-		if len(content) > 100 {
-			content = content[:100] + "..."
-		}
-		b.WriteString(dimStyle.PaddingLeft(2).Render(dateStr + content))
-		b.WriteString("\n")
+		noteText := lipgloss.NewStyle().MaxWidth(m.width - 8).Render(dateStr + note.Content)
+		l.Item(noteText)
 	}
+
+	result = append(result, l.String())
+	return result
 }
 
 func (m featureDetailModel) selectedStory() *prd.UserStory {

@@ -2,11 +2,12 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/list"
 
 	"github.com/aloisdeniel/prd/prd"
 )
@@ -114,47 +115,53 @@ func (m userStoryDetailModel) renderContent() string {
 		return ""
 	}
 
-	var b strings.Builder
+	var sections []string
 
+	// Title with status and bottom margin
 	status := checkboxUnchecked
 	if m.completed {
 		status = checkboxChecked
 	}
-	b.WriteString(titleStyle.Render(fmt.Sprintf("%s %s US-%d | %s", status, renderPriority(m.story.Priority), m.story.ID, m.story.Name)))
-	b.WriteString("\n")
+	title := fmt.Sprintf("%s %s US-%d | %s", status, renderPriority(m.story.Priority), m.story.ID, m.story.Name)
+	sections = append(sections, lipgloss.NewStyle().MarginBottom(1).Render(titleStyle.Render(title)))
 
+	// Description
 	if m.story.Description != "" {
-		b.WriteString(subtitleStyle.Render(m.story.Description))
-		b.WriteString("\n")
+		desc := lipgloss.NewStyle().MaxWidth(m.width - 4).Render(m.story.Description)
+		sections = append(sections, subtitleStyle.Render(desc))
 	}
 
-	b.WriteString("\n")
-	b.WriteString(subtitleStyle.Render("Acceptance Criteria"))
-	b.WriteString("\n\n")
+	// Acceptance Criteria section with top margin
+	sectionHeaderStyle := sectionStyle.MarginTop(1)
+	sections = append(sections, sectionHeaderStyle.Render("Acceptance Criteria"))
 
-	for _, ac := range m.story.AcceptanceCriteria {
-		checkbox := checkboxUnchecked
-		if ac.Completed {
-			checkbox = checkboxChecked
+	if len(m.story.AcceptanceCriteria) > 0 {
+		l := list.New().
+			Enumerator(func(_ list.Items, _ int) string { return "  " })
+
+		for _, ac := range m.story.AcceptanceCriteria {
+			checkbox := checkboxUnchecked
+			if ac.Completed {
+				checkbox = checkboxChecked
+			}
+			text := lipgloss.NewStyle().MaxWidth(m.width - 10).Render(ac.Text)
+			l.Item(fmt.Sprintf("%s %s", checkbox, dimStyle.Render(text)))
 		}
-
-		line := fmt.Sprintf("  %s %s", checkbox, dimStyle.Render(ac.Text))
-		b.WriteString(line + "\n")
+		sections = append(sections, l.String())
 	}
 
+	// Technical Considerations with top margin
 	if m.story.TechnicalConsiderations != "" {
-		b.WriteString("\n")
-		b.WriteString(subtitleStyle.Render("Technical Considerations"))
-		b.WriteString("\n")
-		b.WriteString(dimStyle.PaddingLeft(2).Render(m.story.TechnicalConsiderations))
-		b.WriteString("\n")
+		sections = append(sections, sectionHeaderStyle.Render("Technical Considerations"))
+		tc := lipgloss.NewStyle().MaxWidth(m.width - 4).Render(m.story.TechnicalConsiderations)
+		sections = append(sections, dimStyle.PaddingLeft(2).Render(tc))
 	}
 
+	// Error
 	if m.err != nil {
-		b.WriteString("\n")
-		b.WriteString(errorStyle.Render(m.err.Error()))
+		sections = append(sections, errorStyle.Render(m.err.Error()))
 	}
 
-	return b.String()
+	return lipgloss.JoinVertical(lipgloss.Left, sections...)
 }
 

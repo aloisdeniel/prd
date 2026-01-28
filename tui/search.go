@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/list"
 
 	"github.com/aloisdeniel/prd/prd"
 )
@@ -121,45 +123,57 @@ func (m searchModel) Update(msg tea.Msg) (searchModel, tea.Cmd) {
 }
 
 func (m searchModel) View() string {
-	var b strings.Builder
-
-	b.WriteString(titleStyle.Render("Search"))
-	b.WriteString("\n\n")
-	b.WriteString("  " + m.input.View())
-	b.WriteString("\n\n")
+	title := titleStyle.Render("Search")
+	input := "  " + m.input.View()
 
 	if len(m.results) == 0 {
-		b.WriteString(dimStyle.PaddingLeft(2).Render("No results"))
-		return b.String()
+		return lipgloss.JoinVertical(lipgloss.Left,
+			title,
+			input,
+			dimStyle.PaddingLeft(2).Render("No results"),
+		)
 	}
+
+	// Build results list
+	l := list.New().
+		Enumerator(func(_ list.Items, _ int) string { return "" })
 
 	for i, r := range m.results {
-		cursor := "  "
-		style := normalStyle
-		if i == m.cursor {
-			cursor = selectedStyle.Render("> ")
-			style = selectedStyle
-		}
-
-		if r.isStory {
-			line := fmt.Sprintf("%s  %s US-%d  %s",
-				cursor,
-				dimStyle.Render(r.featureID),
-				r.storyID,
-				style.Render(r.storyName),
-			)
-			b.WriteString(line + "\n")
-		} else {
-			line := fmt.Sprintf("%s%s  %s",
-				cursor,
-				style.Render(r.featureID),
-				style.Render(r.featureName),
-			)
-			b.WriteString(line + "\n")
-		}
+		l.Item(m.renderResult(i, r))
 	}
 
-	return b.String()
+	return lipgloss.JoinVertical(lipgloss.Left,
+		title,
+		input,
+		l.String(),
+	)
+}
+
+func (m searchModel) renderResult(idx int, r searchResult) string {
+	isSelected := idx == m.cursor
+	style := normalStyle
+	if isSelected {
+		style = selectedStyle
+	}
+
+	cursor := "  "
+	if isSelected {
+		cursor = selectedStyle.Render("> ")
+	}
+
+	if r.isStory {
+		return fmt.Sprintf("%s  %s US-%d  %s",
+			cursor,
+			dimStyle.Render(r.featureID),
+			r.storyID,
+			style.Render(r.storyName),
+		)
+	}
+	return fmt.Sprintf("%s%s  %s",
+		cursor,
+		style.Render(r.featureID),
+		style.Render(r.featureName),
+	)
 }
 
 func (m searchModel) selectedResult() *searchResult {
