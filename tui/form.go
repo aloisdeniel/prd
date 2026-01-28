@@ -13,12 +13,15 @@ import (
 
 // featureFormModel handles creating a new feature.
 type featureFormModel struct {
-	inputs   []textinput.Model
-	focused  int
-	basePath string
-	err      error
-	done     bool
+	inputs      []textinput.Model
+	focused     int
+	allSections bool
+	basePath    string
+	err         error
+	done        bool
 }
+
+const featFormFieldCount = 3 // name, desc, allSections toggle
 
 func newFeatureFormModel(basePath string) featureFormModel {
 	nameInput := textinput.New()
@@ -31,8 +34,9 @@ func newFeatureFormModel(basePath string) featureFormModel {
 	descInput.CharLimit = 500
 
 	return featureFormModel{
-		inputs:   []textinput.Model{nameInput, descInput},
-		basePath: basePath,
+		inputs:      []textinput.Model{nameInput, descInput},
+		allSections: true,
+		basePath:    basePath,
 	}
 }
 
@@ -41,17 +45,34 @@ type featureCreatedMsg struct{}
 func (m featureFormModel) Update(msg tea.Msg) (featureFormModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Toggle field (focused == 2)
+		if m.focused == 2 {
+			switch {
+			case key.Matches(msg, keys.Space), key.Matches(msg, keys.Left), key.Matches(msg, keys.Right):
+				m.allSections = !m.allSections
+				return m, nil
+			}
+		}
+
 		switch {
 		case key.Matches(msg, keys.Tab):
-			m.inputs[m.focused].Blur()
-			m.focused = (m.focused + 1) % len(m.inputs)
-			m.inputs[m.focused].Focus()
+			if m.focused < len(m.inputs) {
+				m.inputs[m.focused].Blur()
+			}
+			m.focused = (m.focused + 1) % featFormFieldCount
+			if m.focused < len(m.inputs) {
+				m.inputs[m.focused].Focus()
+			}
 			return m, nil
 		case key.Matches(msg, keys.Enter):
-			if m.focused < len(m.inputs)-1 {
-				m.inputs[m.focused].Blur()
+			if m.focused < featFormFieldCount-1 {
+				if m.focused < len(m.inputs) {
+					m.inputs[m.focused].Blur()
+				}
 				m.focused++
-				m.inputs[m.focused].Focus()
+				if m.focused < len(m.inputs) {
+					m.inputs[m.focused].Focus()
+				}
 				return m, nil
 			}
 			// Submit
@@ -61,7 +82,7 @@ func (m featureFormModel) Update(msg tea.Msg) (featureFormModel, tea.Cmd) {
 				return m, nil
 			}
 			desc := strings.TrimSpace(m.inputs[1].Value())
-			_, err := prd.CreateFeature(m.basePath, name, desc)
+			_, err := prd.CreateFeature(m.basePath, name, desc, m.allSections)
 			if err != nil {
 				m.err = err
 				return m, nil
@@ -71,9 +92,12 @@ func (m featureFormModel) Update(msg tea.Msg) (featureFormModel, tea.Cmd) {
 		}
 	}
 
-	var cmd tea.Cmd
-	m.inputs[m.focused], cmd = m.inputs[m.focused].Update(msg)
-	return m, cmd
+	if m.focused < len(m.inputs) {
+		var cmd tea.Cmd
+		m.inputs[m.focused], cmd = m.inputs[m.focused].Update(msg)
+		return m, cmd
+	}
+	return m, nil
 }
 
 func (m featureFormModel) View() string {
@@ -90,6 +114,18 @@ func (m featureFormModel) View() string {
 	b.WriteString(inputLabelStyle.Render("Description"))
 	b.WriteString("\n")
 	b.WriteString("  " + m.inputs[1].View())
+	b.WriteString("\n\n")
+
+	b.WriteString(inputLabelStyle.Render("All sections"))
+	b.WriteString("\n  ")
+	if m.allSections {
+		b.WriteString(selectedStyle.Render("[x] Include all sections"))
+	} else {
+		b.WriteString(dimStyle.Render("[ ] Required sections only"))
+	}
+	if m.focused == 2 {
+		b.WriteString(dimStyle.Render("  space to toggle"))
+	}
 	b.WriteString("\n")
 
 	if m.err != nil {
@@ -101,7 +137,7 @@ func (m featureFormModel) View() string {
 }
 
 func (m featureFormModel) statusHelp() string {
-	return dimStyle.Render("tab next field  enter submit  esc cancel")
+	return dimStyle.Render("tab next field  space toggle  enter submit  esc cancel")
 }
 
 // userStoryFormModel handles creating a new user story.

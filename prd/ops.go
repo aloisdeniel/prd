@@ -160,7 +160,10 @@ func LoadFeature(basePath, id string) (path string, feature *Feature, err error)
 }
 
 // CreateFeature creates a new feature directory and template file.
-func CreateFeature(basePath, name, desc string) (string, error) {
+// CreateFeature creates a new feature directory and template file.
+// If allSections is true, all sections from the document format are included.
+// If false, only the required sections (Goals, User Stories, Functional Requirements) are included.
+func CreateFeature(basePath, name, desc string, allSections bool) (string, error) {
 	matches, _ := filepath.Glob(filepath.Join(basePath, "*"))
 	maxID := 0
 	for _, m := range matches {
@@ -183,23 +186,23 @@ func CreateFeature(basePath, name, desc string) (string, error) {
 		desc = "TODO: Add description"
 	}
 
-	content := fmt.Sprintf(`# %s
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("# %s\n\n%s\n\n", name, desc))
+	sb.WriteString("## Goals\n\nTODO: Define goals\n\n")
+	sb.WriteString("## User Stories\n\n")
+	sb.WriteString("## Functional Requirements\n\nTODO: Define functional requirements\n")
 
-%s
-
-## Goals
-
-TODO: Define goals
-
-## User Stories
-
-## Functional Requirements
-
-TODO: Define functional requirements
-`, name, desc)
+	if allSections {
+		sb.WriteString("\n## Non-Goals\n\nTODO: Define non-goals\n")
+		sb.WriteString("\n## Technical Considerations\n\nTODO: Define technical considerations\n")
+		sb.WriteString("\n## Analytics & Instrumentation\n\nTODO: Define analytics\n")
+		sb.WriteString("\n## Risks & Mitigations\n\nTODO: Define risks\n")
+		sb.WriteString("\n## Success Metrics\n\nTODO: Define success metrics\n")
+		sb.WriteString("\n## Open Questions\n\nTODO: Define open questions\n")
+	}
 
 	prdPath := filepath.Join(dirPath, "prd.md")
-	if err := writePRD(prdPath, content); err != nil {
+	if err := writePRD(prdPath, sb.String()); err != nil {
 		return "", fmt.Errorf("failed to write file: %w", err)
 	}
 	return newID, nil

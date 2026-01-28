@@ -147,12 +147,15 @@ func (m featureDetailModel) selectedStory() *prd.UserStory {
 }
 
 func nextStoryID(stories []prd.UserStory, progress map[int]bool) int {
+	bestID := -1
+	bestPriority := 6 // higher than max (5)
 	for _, us := range stories {
-		if !progress[us.ID] {
-			return us.ID
+		if !progress[us.ID] && us.Priority < bestPriority {
+			bestPriority = us.Priority
+			bestID = us.ID
 		}
 	}
-	return -1
+	return bestID
 }
 
 func (m featureDetailModel) statusHelp() string {

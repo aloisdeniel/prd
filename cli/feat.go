@@ -20,6 +20,7 @@ var (
 	flagTechnicalConsiderations string
 	flagNoteContent             string
 	flagPriority                int
+	flagMinimal                 bool
 )
 
 func init() {
@@ -28,6 +29,7 @@ func init() {
 	featCmd.Flags().StringSliceVar(&flagAcceptanceCriteria, "acceptance-criteria", nil, "Acceptance criteria for a user story")
 	featCmd.Flags().StringVar(&flagTechnicalConsiderations, "technical-considerations", "", "Technical considerations for a user story")
 	featCmd.Flags().IntVar(&flagPriority, "priority", 3, "User story priority (1-5)")
+	featCmd.Flags().BoolVar(&flagMinimal, "minimal", false, "Only include required sections (Goals, User Stories, Functional Requirements)")
 	featCmd.Flags().StringVar(&flagNoteContent, "content", "", "Note content")
 	rootCmd.AddCommand(featCmd)
 }
@@ -297,7 +299,7 @@ func runFeatNew() error {
 		os.Exit(1)
 	}
 
-	newID, err := prd.CreateFeature("prd", flagName, flagDescription)
+	newID, err := prd.CreateFeature("prd", flagName, flagDescription, !flagMinimal)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

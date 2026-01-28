@@ -201,12 +201,12 @@ func (m sidebarModel) View() string {
 			if isNext {
 				tag = " " + nextTag
 			}
-			maxLabel := sidebarWidth - 10
+			maxName := sidebarWidth - 18
 			if isNext {
-				maxLabel -= 6 // room for " NEXT"
+				maxName -= 6 // room for " NEXT"
 			}
-			label := truncate(fmt.Sprintf("US-%d %s", us.ID, us.Name), maxLabel)
-			line := fmt.Sprintf("%s  %s %s %s%s", cursor, status, renderPriority(us.Priority), style.Render(label), tag)
+			name := truncate(us.Name, maxName)
+			line := fmt.Sprintf("%s  %s %s US-%d  %s%s", cursor, status, renderPriority(us.Priority), us.ID, style.Render(name), tag)
 			b.WriteString(line + "\n")
 		}
 	}
