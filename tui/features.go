@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -61,48 +60,6 @@ func (m featureListModel) Update(msg tea.Msg) (featureListModel, tea.Cmd) {
 		}
 	}
 	return m, nil
-}
-
-func (m featureListModel) View() string {
-	var b strings.Builder
-
-	b.WriteString(titleStyle.Render("Features"))
-	b.WriteString("\n\n")
-
-	if m.err != nil {
-		b.WriteString(errorStyle.Render(m.err.Error()))
-		return b.String()
-	}
-
-	if len(m.entries) == 0 {
-		b.WriteString(dimStyle.PaddingLeft(2).Render("No features found. Press 'n' to create one."))
-		return b.String()
-	}
-
-	for i, e := range m.entries {
-		cursor := "  "
-		style := normalStyle
-		if i == m.cursor {
-			cursor = selectedStyle.Render("> ")
-			style = selectedStyle
-		}
-
-		progress := fmt.Sprintf("[%d/%d]", e.Completed, e.Total)
-		pStyle := incompleteStyle
-		if e.Completed == e.Total && e.Total > 0 {
-			pStyle = completedStyle
-		}
-
-		line := fmt.Sprintf("%s%s  %s  %s",
-			cursor,
-			style.Render(e.ID),
-			style.Render(e.Name),
-			pStyle.Render(progress),
-		)
-		b.WriteString(line + "\n")
-	}
-
-	return b.String()
 }
 
 func (m featureListModel) selectedEntry() *prd.FeatureEntry {

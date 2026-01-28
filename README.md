@@ -113,6 +113,8 @@ The version footer (`---` followed by version and date) is automatically maintai
 
 ## TUI
 
+![screenshot](screenshot.png)
+
 Running `prd` with no arguments opens the interactive terminal UI. You can also launch it explicitly with `prd tui`.
 
 | Key | Context | Action |

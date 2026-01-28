@@ -516,26 +516,7 @@ func (m Model) updateSearch(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	var content string
-
-	if m.wideMode && !m.isOverlayScreen() {
-		content = m.viewWide()
-	} else {
-		switch m.currentScreen() {
-		case screenFeatureList:
-			content = m.featureList.View()
-		case screenFeatureDetail:
-			content = m.featureDetail.View()
-		case screenUserStoryDetail:
-			content = m.storyDetail.View()
-		case screenFeatureForm:
-			content = m.featureForm.View()
-		case screenUserStoryForm:
-			content = m.storyForm.View()
-		case screenSearch:
-			content = m.search.View()
-		}
-	}
+	content := m.viewWide()
 
 	// Status bar
 	statusHelp := m.currentStatusHelp()
@@ -556,11 +537,12 @@ func (m Model) View() string {
 }
 
 func (m Model) viewWide() string {
-	sidebarContent := m.sidebar.View()
-	detailWidth := m.width - sidebarWidth - 1
-	if detailWidth < 10 {
-		detailWidth = 10
+	if m.height < 2 || m.width < sidebarWidth+10 {
+		return "Window too small"
 	}
+
+	sidebarContent := m.sidebar.View()
+	detailWidth := max(m.width-sidebarWidth-1, 10)
 
 	var detailContent string
 	switch m.currentScreen() {

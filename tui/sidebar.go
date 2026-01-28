@@ -153,6 +153,7 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 func (m sidebarModel) View() string {
 	var b strings.Builder
 
+	b.WriteString("\n\n")
 	b.WriteString(sidebarTitleStyle.Render("Features"))
 	b.WriteString("\n\n")
 

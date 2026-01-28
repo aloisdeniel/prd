@@ -100,7 +100,7 @@ func (m featureDetailModel) View() string {
 	}
 
 	b.WriteString(titleStyle.Render(m.feature.Name))
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	if m.feature.Description != "" {
 		desc := m.feature.Description
