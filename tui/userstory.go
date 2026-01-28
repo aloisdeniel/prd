@@ -12,27 +12,29 @@ import (
 )
 
 type userStoryDetailModel struct {
-	story    *prd.UserStory
-	path     string
-	cursor   int
-	width    int
-	height   int
-	err      error
-	basePath string
-	featID   string
+	story     *prd.UserStory
+	path      string
+	completed bool
+	width     int
+	height    int
+	err       error
+	basePath  string
+	featID    string
 }
 
-func newUserStoryDetailModel(basePath, featID, path string, story *prd.UserStory) userStoryDetailModel {
+func newUserStoryDetailModel(basePath, featID, path string, story *prd.UserStory, completed bool) userStoryDetailModel {
 	return userStoryDetailModel{
-		basePath: basePath,
-		featID:   featID,
-		path:     path,
-		story:    story,
+		basePath:  basePath,
+		featID:    featID,
+		path:      path,
+		story:     story,
+		completed: completed,
 	}
 }
 
 type storyReloadedMsg struct {
-	story *prd.UserStory
+	story     *prd.UserStory
+	completed bool
 }
 
 func (m userStoryDetailModel) reloadStory() tea.Msg {
@@ -40,9 +42,10 @@ func (m userStoryDetailModel) reloadStory() tea.Msg {
 	if err != nil {
 		return errMsg{err}
 	}
+	progress, _ := prd.LoadProgress(m.path)
 	for i := range feature.UserStories {
 		if feature.UserStories[i].ID == m.story.ID {
-			return storyReloadedMsg{&feature.UserStories[i]}
+			return storyReloadedMsg{&feature.UserStories[i], progress[feature.UserStories[i].ID]}
 		}
 	}
 	return errMsg{fmt.Errorf("user story US-%d not found after reload", m.story.ID)}
@@ -52,10 +55,8 @@ func (m userStoryDetailModel) Update(msg tea.Msg) (userStoryDetailModel, tea.Cmd
 	switch msg := msg.(type) {
 	case storyReloadedMsg:
 		m.story = msg.story
+		m.completed = msg.completed
 		m.err = nil
-		if m.cursor >= len(m.story.AcceptanceCriteria) {
-			m.cursor = max(0, len(m.story.AcceptanceCriteria)-1)
-		}
 	case errMsg:
 		m.err = msg.err
 	case tea.KeyMsg:
@@ -63,23 +64,6 @@ func (m userStoryDetailModel) Update(msg tea.Msg) (userStoryDetailModel, tea.Cmd
 			return m, nil
 		}
 		switch {
-		case key.Matches(msg, keys.Up):
-			if m.cursor > 0 {
-				m.cursor--
-			}
-		case key.Matches(msg, keys.Down):
-			if m.cursor < len(m.story.AcceptanceCriteria)-1 {
-				m.cursor++
-			}
-		case key.Matches(msg, keys.Space):
-			if m.cursor >= 0 && m.cursor < len(m.story.AcceptanceCriteria) {
-				acNum := m.cursor + 1
-				if err := prd.ToggleAcceptanceCriterion(m.path, m.story.ID, acNum); err != nil {
-					m.err = err
-					return m, nil
-				}
-				return m, m.reloadStory
-			}
 		case key.Matches(msg, keys.Complete):
 			if err := prd.CompleteUserStory(m.path, m.story.ID); err != nil {
 				m.err = err
@@ -99,7 +83,11 @@ func (m userStoryDetailModel) View() string {
 		return b.String()
 	}
 
-	b.WriteString(titleStyle.Render(fmt.Sprintf("US-%d | %s", m.story.ID, m.story.Name)))
+	status := checkboxUnchecked
+	if m.completed {
+		status = checkboxChecked
+	}
+	b.WriteString(titleStyle.Render(fmt.Sprintf("%s %s US-%d | %s", status, renderPriority(m.story.Priority), m.story.ID, m.story.Name)))
 	b.WriteString("\n")
 
 	if m.story.Description != "" {
@@ -111,20 +99,13 @@ func (m userStoryDetailModel) View() string {
 	b.WriteString(subtitleStyle.Render("Acceptance Criteria"))
 	b.WriteString("\n\n")
 
-	for i, ac := range m.story.AcceptanceCriteria {
-		cursor := "  "
-		style := normalStyle
-		if i == m.cursor {
-			cursor = selectedStyle.Render("> ")
-			style = selectedStyle
-		}
-
+	for _, ac := range m.story.AcceptanceCriteria {
 		checkbox := checkboxUnchecked
 		if ac.Completed {
 			checkbox = checkboxChecked
 		}
 
-		line := fmt.Sprintf("%s%s %s", cursor, checkbox, style.Render(ac.Text))
+		line := fmt.Sprintf("  %s %s", checkbox, dimStyle.Render(ac.Text))
 		b.WriteString(line + "\n")
 	}
 
@@ -145,6 +126,6 @@ func (m userStoryDetailModel) View() string {
 }
 
 func (m userStoryDetailModel) statusHelp() string {
-	parts := []string{"j/k navigate", "space toggle", "c complete all", "esc back"}
+	parts := []string{"c toggle complete", "esc back"}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Join(parts, "  "))
 }

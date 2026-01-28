@@ -108,6 +108,7 @@ func (m featureFormModel) statusHelp() string {
 type userStoryFormModel struct {
 	inputs   []textinput.Model
 	focused  int
+	priority int // 1-5
 	prdPath  string
 	err      error
 	done     bool
@@ -128,27 +129,54 @@ func newUserStoryFormModel(prdPath string) userStoryFormModel {
 	acInput.CharLimit = 500
 
 	return userStoryFormModel{
-		inputs:  []textinput.Model{nameInput, descInput, acInput},
-		prdPath: prdPath,
+		inputs:   []textinput.Model{nameInput, descInput, acInput},
+		priority: 3,
+		prdPath:  prdPath,
 	}
 }
 
 type storyCreatedMsg struct{}
 
+const storyFormFieldCount = 4 // name, desc, ac, priority
+
 func (m userStoryFormModel) Update(msg tea.Msg) (userStoryFormModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Priority picker (focused == 3)
+		if m.focused == 3 {
+			switch {
+			case key.Matches(msg, keys.Left):
+				if m.priority > 1 {
+					m.priority--
+				}
+				return m, nil
+			case key.Matches(msg, keys.Right):
+				if m.priority < 5 {
+					m.priority++
+				}
+				return m, nil
+			}
+		}
+
 		switch {
 		case key.Matches(msg, keys.Tab):
-			m.inputs[m.focused].Blur()
-			m.focused = (m.focused + 1) % len(m.inputs)
-			m.inputs[m.focused].Focus()
+			if m.focused < len(m.inputs) {
+				m.inputs[m.focused].Blur()
+			}
+			m.focused = (m.focused + 1) % storyFormFieldCount
+			if m.focused < len(m.inputs) {
+				m.inputs[m.focused].Focus()
+			}
 			return m, nil
 		case key.Matches(msg, keys.Enter):
-			if m.focused < len(m.inputs)-1 {
-				m.inputs[m.focused].Blur()
+			if m.focused < storyFormFieldCount-1 {
+				if m.focused < len(m.inputs) {
+					m.inputs[m.focused].Blur()
+				}
 				m.focused++
-				m.inputs[m.focused].Focus()
+				if m.focused < len(m.inputs) {
+					m.inputs[m.focused].Focus()
+				}
 				return m, nil
 			}
 			// Submit
@@ -168,7 +196,7 @@ func (m userStoryFormModel) Update(msg tea.Msg) (userStoryFormModel, tea.Cmd) {
 					}
 				}
 			}
-			err := prd.CreateUserStory(m.prdPath, name, desc, criteria, "")
+			err := prd.CreateUserStory(m.prdPath, name, desc, criteria, "", m.priority)
 			if err != nil {
 				m.err = err
 				return m, nil
@@ -178,9 +206,12 @@ func (m userStoryFormModel) Update(msg tea.Msg) (userStoryFormModel, tea.Cmd) {
 		}
 	}
 
-	var cmd tea.Cmd
-	m.inputs[m.focused], cmd = m.inputs[m.focused].Update(msg)
-	return m, cmd
+	if m.focused < len(m.inputs) {
+		var cmd tea.Cmd
+		m.inputs[m.focused], cmd = m.inputs[m.focused].Update(msg)
+		return m, cmd
+	}
+	return m, nil
 }
 
 func (m userStoryFormModel) View() string {
@@ -202,6 +233,21 @@ func (m userStoryFormModel) View() string {
 	b.WriteString(inputLabelStyle.Render("Acceptance Criteria"))
 	b.WriteString("\n")
 	b.WriteString("  " + m.inputs[2].View())
+	b.WriteString("\n\n")
+
+	b.WriteString(inputLabelStyle.Render("Priority"))
+	b.WriteString("\n  ")
+	for p := 1; p <= 5; p++ {
+		label := fmt.Sprintf(" P%d ", p)
+		if p == m.priority {
+			b.WriteString(selectedStyle.Render(label))
+		} else {
+			b.WriteString(dimStyle.Render(label))
+		}
+	}
+	if m.focused == 3 {
+		b.WriteString(dimStyle.Render("  ←/→ to change"))
+	}
 	b.WriteString("\n")
 
 	if m.err != nil {
@@ -213,7 +259,7 @@ func (m userStoryFormModel) View() string {
 }
 
 func (m userStoryFormModel) statusHelp() string {
-	return dimStyle.Render("tab next field  enter submit  esc cancel")
+	return dimStyle.Render("tab next field  ←/→ priority  enter submit  esc cancel")
 }
 
 var errEmpty = fmt.Errorf("name cannot be empty")

@@ -15,6 +15,7 @@ type featureDetailModel struct {
 	feature  *prd.Feature
 	path     string
 	id       string
+	progress map[int]bool
 	cursor   int
 	width    int
 	height   int
@@ -27,8 +28,9 @@ func newFeatureDetailModel(basePath, id string) featureDetailModel {
 }
 
 type featureLoadedMsg struct {
-	path    string
-	feature *prd.Feature
+	path     string
+	feature  *prd.Feature
+	progress map[int]bool
 }
 
 func (m featureDetailModel) loadFeature() tea.Msg {
@@ -36,7 +38,8 @@ func (m featureDetailModel) loadFeature() tea.Msg {
 	if err != nil {
 		return errMsg{err}
 	}
-	return featureLoadedMsg{path, feature}
+	progress, _ := prd.LoadProgress(path)
+	return featureLoadedMsg{path, feature, progress}
 }
 
 func (m featureDetailModel) Init() tea.Cmd {
@@ -48,6 +51,7 @@ func (m featureDetailModel) Update(msg tea.Msg) (featureDetailModel, tea.Cmd) {
 	case featureLoadedMsg:
 		m.feature = msg.feature
 		m.path = msg.path
+		m.progress = msg.progress
 		m.err = nil
 		if m.cursor >= len(m.feature.UserStories) {
 			m.cursor = max(0, len(m.feature.UserStories)-1)
@@ -101,6 +105,8 @@ func (m featureDetailModel) View() string {
 		return b.String()
 	}
 
+	nextID := nextStoryID(m.feature.UserStories, m.progress)
+
 	for i, us := range m.feature.UserStories {
 		cursor := "  "
 		style := normalStyle
@@ -110,24 +116,22 @@ func (m featureDetailModel) View() string {
 		}
 
 		status := checkboxUnchecked
-		if prd.IsStoryCompleted(us) {
+		if m.progress[us.ID] {
 			status = checkboxChecked
 		}
 
-		completed := 0
-		for _, ac := range us.AcceptanceCriteria {
-			if ac.Completed {
-				completed++
-			}
+		tag := ""
+		if us.ID == nextID {
+			tag = " " + nextTag
 		}
-		progress := fmt.Sprintf("(%d/%d)", completed, len(us.AcceptanceCriteria))
 
-		line := fmt.Sprintf("%s%s US-%d  %s  %s",
+		line := fmt.Sprintf("%s%s %s US-%d  %s%s",
 			cursor,
 			status,
+			renderPriority(us.Priority),
 			us.ID,
 			style.Render(us.Name),
-			dimStyle.Render(progress),
+			tag,
 		)
 		b.WriteString(line + "\n")
 	}
@@ -142,7 +146,16 @@ func (m featureDetailModel) selectedStory() *prd.UserStory {
 	return nil
 }
 
+func nextStoryID(stories []prd.UserStory, progress map[int]bool) int {
+	for _, us := range stories {
+		if !progress[us.ID] {
+			return us.ID
+		}
+	}
+	return -1
+}
+
 func (m featureDetailModel) statusHelp() string {
-	parts := []string{"j/k navigate", "enter open", "n new story", "d delete", "esc back"}
+	parts := []string{"j/k navigate", "enter open", "u/n new story", "d delete", "esc back"}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Join(parts, "  "))
 }

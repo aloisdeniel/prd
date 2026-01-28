@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"fmt"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 var (
 	titleStyle = lipgloss.NewStyle().
@@ -46,6 +50,34 @@ var (
 	cursorStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("170"))
 
-	checkboxChecked   = completedStyle.Render("[x]")
+	sidebarTitleStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("170")).
+				PaddingLeft(1)
+
+	nextTagStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("0")).
+			Background(lipgloss.Color("213"))
+
+	nextTag = nextTagStyle.Render("NEXT")
+
+	checkboxChecked = completedStyle.Render("[x]")
 	checkboxUnchecked = incompleteStyle.Render("[ ]")
+
+	priorityStyles = map[int]lipgloss.Style{
+		1: lipgloss.NewStyle().Foreground(lipgloss.Color("196")),  // red
+		2: lipgloss.NewStyle().Foreground(lipgloss.Color("208")),  // orange
+		3: lipgloss.NewStyle().Foreground(lipgloss.Color("226")),  // yellow
+		4: lipgloss.NewStyle().Foreground(lipgloss.Color("118")),  // light green
+		5: lipgloss.NewStyle().Foreground(lipgloss.Color("34")),   // green
+	}
 )
+
+func renderPriority(p int) string {
+	s, ok := priorityStyles[p]
+	if !ok {
+		s = dimStyle
+	}
+	return s.Render(fmt.Sprintf("P%d", p))
+}

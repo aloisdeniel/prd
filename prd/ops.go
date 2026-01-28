@@ -10,6 +10,81 @@ import (
 	"time"
 )
 
+// ProgressPath returns the path to progress.md next to the given prd.md.
+func ProgressPath(prdPath string) string {
+	return filepath.Join(filepath.Dir(prdPath), "progress.md")
+}
+
+// LoadProgress parses progress.md and returns a map of user story ID to completion status.
+func LoadProgress(prdPath string) (map[int]bool, error) {
+	progPath := ProgressPath(prdPath)
+	content, err := os.ReadFile(progPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[int]bool{}, nil
+		}
+		return nil, err
+	}
+	return parseProgressChecklist(string(content)), nil
+}
+
+func parseProgressChecklist(content string) map[int]bool {
+	result := make(map[int]bool)
+	for _, line := range SplitLines(content) {
+		line = strings.TrimSpace(line)
+		completed := false
+		var rest string
+		if strings.HasPrefix(line, "- [x] US-") {
+			completed = true
+			rest = strings.TrimPrefix(line, "- [x] US-")
+		} else if strings.HasPrefix(line, "- [ ] US-") {
+			rest = strings.TrimPrefix(line, "- [ ] US-")
+		} else {
+			continue
+		}
+		// Extract the number
+		numStr := ""
+		for _, c := range rest {
+			if c >= '0' && c <= '9' {
+				numStr += string(c)
+			} else {
+				break
+			}
+		}
+		if id, err := strconv.Atoi(numStr); err == nil {
+			result[id] = completed
+		}
+	}
+	return result
+}
+
+// ensureProgress creates or syncs progress.md from prd.md user stories.
+func ensureProgress(prdPath string, feature *Feature) error {
+	progPath := ProgressPath(prdPath)
+	existing, _ := LoadProgress(prdPath)
+
+	var sb strings.Builder
+	sb.WriteString("# Progress\n\n")
+	for _, us := range feature.UserStories {
+		check := " "
+		if existing[us.ID] {
+			check = "x"
+		}
+		sb.WriteString(fmt.Sprintf("- [%s] US-%d\n", check, us.ID))
+	}
+
+	// Preserve existing notes section
+	content, err := os.ReadFile(progPath)
+	if err == nil {
+		text := string(content)
+		if idx := strings.Index(text, "\n## Notes"); idx >= 0 {
+			sb.WriteString(text[idx:])
+		}
+	}
+
+	return os.WriteFile(progPath, []byte(sb.String()), 0o644)
+}
+
 // ListFeatures returns all features found under basePath.
 func ListFeatures(basePath string) ([]FeatureEntry, error) {
 	matches, err := filepath.Glob(filepath.Join(basePath, "*", "prd.md"))
@@ -42,9 +117,10 @@ func ListFeatures(basePath string) ([]FeatureEntry, error) {
 			displayName = name
 		}
 
+		progress, _ := LoadProgress(path)
 		completed := 0
 		for _, us := range feature.UserStories {
-			if IsStoryCompleted(us) {
+			if progress[us.ID] {
 				completed++
 			}
 		}
@@ -130,7 +206,11 @@ TODO: Define functional requirements
 }
 
 // CreateUserStory appends a new user story to the PRD file.
-func CreateUserStory(prdPath, name, desc string, criteria []string, techConsider string) error {
+// Priority should be 1-5 (use 0 to default to P3).
+func CreateUserStory(prdPath, name, desc string, criteria []string, techConsider string, priority int) error {
+	if priority < 1 || priority > 5 {
+		priority = 3
+	}
 	content, err := os.ReadFile(prdPath)
 	if err != nil {
 		return err
@@ -149,7 +229,7 @@ func CreateUserStory(prdPath, name, desc string, criteria []string, techConsider
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("### US-%d | %s\n", nextID, name))
+	sb.WriteString(fmt.Sprintf("### US-%d | P%d | %s\n", nextID, priority, name))
 	if desc != "" {
 		sb.WriteString("\n" + desc + "\n")
 	}
@@ -199,100 +279,87 @@ func CreateUserStory(prdPath, name, desc string, criteria []string, techConsider
 		result.WriteString("\n" + newSection)
 	}
 
-	return writePRD(prdPath, result.String())
+	if err := writePRD(prdPath, result.String()); err != nil {
+		return err
+	}
+
+	// Re-parse to get updated feature and sync progress.md
+	updated, err := os.ReadFile(prdPath)
+	if err != nil {
+		return err
+	}
+	feat, err := Parse(string(updated))
+	if err != nil {
+		return err
+	}
+	return ensureProgress(prdPath, &feat)
 }
 
-// CompleteUserStory marks all acceptance criteria as completed.
+// CompleteUserStory toggles the completion of a user story in progress.md.
 func CompleteUserStory(prdPath string, usID int) error {
+	// Verify story exists in prd.md
 	content, err := os.ReadFile(prdPath)
 	if err != nil {
 		return err
 	}
-	text := string(content)
-	lines := SplitLines(text)
-	section := ExtractUserStorySectionRange(text, usID)
-	if section.Start < 0 {
-		return fmt.Errorf("user story US-%d not found", usID)
-	}
-
-	for i := section.Start; i < section.End; i++ {
-		lines[i] = strings.Replace(lines[i], "- [ ] ", "- [x] ", 1)
-	}
-
-	return writeLines(prdPath, lines, text)
-}
-
-// CompleteAcceptanceCriterion marks a single acceptance criterion as completed.
-func CompleteAcceptanceCriterion(prdPath string, usID, acNum int) error {
-	content, err := os.ReadFile(prdPath)
+	feature, err := Parse(string(content))
 	if err != nil {
 		return err
 	}
-	text := string(content)
-	lines := SplitLines(text)
-	section := ExtractUserStorySectionRange(text, usID)
-	if section.Start < 0 {
-		return fmt.Errorf("user story US-%d not found", usID)
-	}
-
-	count := 0
 	found := false
-	for i := section.Start; i < section.End; i++ {
-		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, "- [ ] ") || strings.HasPrefix(trimmed, "- [x] ") {
-			count++
-			if count == acNum {
-				lines[i] = strings.Replace(lines[i], "- [ ] ", "- [x] ", 1)
-				found = true
-				break
-			}
+	for _, us := range feature.UserStories {
+		if us.ID == usID {
+			found = true
+			break
 		}
 	}
 	if !found {
-		return fmt.Errorf("acceptance criterion %d not found in US-%d", acNum, usID)
-	}
-
-	return writeLines(prdPath, lines, text)
-}
-
-// ToggleAcceptanceCriterion toggles a single acceptance criterion.
-func ToggleAcceptanceCriterion(prdPath string, usID, acNum int) error {
-	content, err := os.ReadFile(prdPath)
-	if err != nil {
-		return err
-	}
-	text := string(content)
-	lines := SplitLines(text)
-	section := ExtractUserStorySectionRange(text, usID)
-	if section.Start < 0 {
 		return fmt.Errorf("user story US-%d not found", usID)
 	}
 
-	count := 0
-	found := false
-	for i := section.Start; i < section.End; i++ {
-		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, "- [ ] ") {
-			count++
-			if count == acNum {
-				lines[i] = strings.Replace(lines[i], "- [ ] ", "- [x] ", 1)
-				found = true
-				break
-			}
-		} else if strings.HasPrefix(trimmed, "- [x] ") {
-			count++
-			if count == acNum {
-				lines[i] = strings.Replace(lines[i], "- [x] ", "- [ ] ", 1)
-				found = true
-				break
-			}
-		}
-	}
-	if !found {
-		return fmt.Errorf("acceptance criterion %d not found in US-%d", acNum, usID)
+	// Ensure progress.md exists
+	if err := ensureProgress(prdPath, &feature); err != nil {
+		return err
 	}
 
-	return writeLines(prdPath, lines, text)
+	// Toggle in progress.md
+	progPath := ProgressPath(prdPath)
+	progContent, err := os.ReadFile(progPath)
+	if err != nil {
+		return err
+	}
+	progText := string(progContent)
+	lines := SplitLines(progText)
+
+	target := fmt.Sprintf("US-%d", usID)
+	toggled := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- [ ] "+target) {
+			lines[i] = strings.Replace(line, "- [ ] ", "- [x] ", 1)
+			toggled = true
+			break
+		} else if strings.HasPrefix(trimmed, "- [x] "+target) {
+			lines[i] = strings.Replace(line, "- [x] ", "- [ ] ", 1)
+			toggled = true
+			break
+		}
+	}
+	if !toggled {
+		return fmt.Errorf("user story US-%d not found in progress.md", usID)
+	}
+
+	var result strings.Builder
+	for i, line := range lines {
+		result.WriteString(line)
+		if i < len(lines)-1 {
+			result.WriteString("\n")
+		}
+	}
+	if strings.HasSuffix(progText, "\n") && !strings.HasSuffix(result.String(), "\n") {
+		result.WriteString("\n")
+	}
+	return os.WriteFile(progPath, []byte(result.String()), 0o644)
 }
 
 // DeleteUserStory removes a user story from the PRD file.
@@ -321,68 +388,145 @@ func DeleteUserStory(prdPath string, usID int) error {
 		result.WriteString(lines[i] + "\n")
 	}
 
-	return writePRD(prdPath, result.String())
+	if err := writePRD(prdPath, result.String()); err != nil {
+		return err
+	}
+
+	// Remove from progress.md
+	progPath := ProgressPath(prdPath)
+	progContent, err := os.ReadFile(progPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	target := fmt.Sprintf("US-%d", usID)
+	progLines := SplitLines(string(progContent))
+	var progResult strings.Builder
+	for _, line := range progLines {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, target) && (strings.HasPrefix(trimmed, "- [ ] ") || strings.HasPrefix(trimmed, "- [x] ")) {
+			continue
+		}
+		progResult.WriteString(line + "\n")
+	}
+	return os.WriteFile(progPath, []byte(progResult.String()), 0o644)
 }
 
-// AddNote adds a dated note to the PRD file.
+// AddNote adds a dated note to progress.md.
 func AddNote(prdPath, noteContent string) error {
+	progPath := ProgressPath(prdPath)
+
+	// Ensure progress.md exists
 	content, err := os.ReadFile(prdPath)
 	if err != nil {
 		return err
 	}
-	text := string(content)
+	feature, err := Parse(string(content))
+	if err != nil {
+		return err
+	}
+	if err := ensureProgress(prdPath, &feature); err != nil {
+		return err
+	}
+
+	progContent, err := os.ReadFile(progPath)
+	if err != nil {
+		return err
+	}
+	text := string(progContent)
 
 	date := time.Now().Format("2006-01-02")
 	noteBlock := fmt.Sprintf("### %s\n\n%s\n", date, noteContent)
 
 	lines := SplitLines(text)
 
-	insertIdx := -1
+	// Find the "## Notes" heading
+	notesIdx := -1
 	for i, line := range lines {
 		if strings.HasPrefix(line, "## Notes") {
-			insertIdx = i + 1
-			for insertIdx < len(lines) && lines[insertIdx] == "" {
-				insertIdx++
-			}
+			notesIdx = i
 			break
 		}
 	}
 
 	var result strings.Builder
-	if insertIdx >= 0 {
-		for i := 0; i < insertIdx; i++ {
+	if notesIdx >= 0 {
+		// Write everything up to and including "## Notes"
+		for i := 0; i <= notesIdx; i++ {
 			result.WriteString(lines[i] + "\n")
 		}
+		// Blank line after heading, then the new note
 		result.WriteString("\n" + noteBlock)
-		for i := insertIdx; i < len(lines); i++ {
-			result.WriteString(lines[i] + "\n")
+		// Skip any blank lines after the heading in the original
+		rest := notesIdx + 1
+		for rest < len(lines) && lines[rest] == "" {
+			rest++
+		}
+		// Add remaining existing notes with a blank line separator
+		if rest < len(lines) {
+			result.WriteString("\n")
+			for i := rest; i < len(lines); i++ {
+				result.WriteString(lines[i] + "\n")
+			}
 		}
 	} else {
-		footerIdx := -1
-		for i, line := range lines {
-			if strings.TrimSpace(line) == "---" {
-				footerIdx = i
-				break
-			}
+		result.WriteString(text)
+		if !strings.HasSuffix(text, "\n") {
+			result.WriteString("\n")
 		}
-		if footerIdx >= 0 {
-			for i := 0; i < footerIdx; i++ {
-				result.WriteString(lines[i] + "\n")
-			}
-			result.WriteString("## Notes\n\n" + noteBlock + "\n")
-			for i := footerIdx; i < len(lines); i++ {
-				result.WriteString(lines[i] + "\n")
-			}
-		} else {
-			result.WriteString(text)
-			if !strings.HasSuffix(text, "\n") {
-				result.WriteString("\n")
-			}
-			result.WriteString("\n## Notes\n\n" + noteBlock)
-		}
+		result.WriteString("\n## Notes\n\n" + noteBlock)
 	}
 
-	return writePRD(prdPath, result.String())
+	return os.WriteFile(progPath, []byte(result.String()), 0o644)
+}
+
+// LoadProgressNotes parses notes from progress.md.
+func LoadProgressNotes(prdPath string) ([]Note, error) {
+	progPath := ProgressPath(prdPath)
+	content, err := os.ReadFile(progPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	text := string(content)
+	lines := SplitLines(text)
+
+	var notes []Note
+	inNotes := false
+	var currentNote *Note
+	for _, line := range lines {
+		if strings.HasPrefix(line, "## Notes") {
+			inNotes = true
+			continue
+		}
+		if !inNotes {
+			continue
+		}
+		if strings.HasPrefix(line, "## ") {
+			break
+		}
+		if strings.HasPrefix(line, "### ") {
+			if currentNote != nil {
+				currentNote.Content = strings.TrimSpace(currentNote.Content)
+				notes = append(notes, *currentNote)
+			}
+			date := strings.TrimSpace(strings.TrimPrefix(line, "### "))
+			currentNote = &Note{Date: date}
+			continue
+		}
+		if currentNote != nil {
+			currentNote.Content += line + "\n"
+		}
+	}
+	if currentNote != nil {
+		currentNote.Content = strings.TrimSpace(currentNote.Content)
+		notes = append(notes, *currentNote)
+	}
+	return notes, nil
 }
 
 // BumpVersion increments the document version and updates the date.

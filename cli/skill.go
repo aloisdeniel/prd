@@ -116,7 +116,7 @@ Prints the ID of the first user story with incomplete acceptance criteria.
 ` + "```" + `
 prd feat <feature-id> us new --name "Story name" --description "Description" \
   --acceptance-criteria "First criterion" --acceptance-criteria "Second criterion" \
-  --technical-considerations "Notes"
+  --technical-considerations "Notes" --priority 2
 ` + "```" + `
 
 Appends a new user story to the feature's PRD file.
@@ -129,21 +129,13 @@ prd feat <feature-id> us <story-id> accept ls
 
 Lists all acceptance criteria with their number (1-based), status, and text.
 
-### Complete a single acceptance criterion
-
-` + "```" + `
-prd feat <feature-id> us <story-id> accept <criterion-number> complete
-` + "```" + `
-
-Marks the Nth acceptance criterion (1-based) as done.
-
-### Complete all acceptance criteria
+### Complete a user story
 
 ` + "```" + `
 prd feat <feature-id> us <story-id> complete
 ` + "```" + `
 
-Marks every acceptance criterion in the user story as done.
+Toggles the user story completion status in ` + "`progress.md`" + `.
 
 ### Delete a user story
 
@@ -190,11 +182,7 @@ US=$(prd feat $FEAT us next)
 # Read the story details
 prd feat $FEAT us $US
 
-# After implementing, mark criteria done one by one
-prd feat $FEAT us $US accept 1 complete
-prd feat $FEAT us $US accept 2 complete
-
-# Or mark all at once
+# After implementing, mark story as done
 prd feat $FEAT us $US complete
 
 # Add a note about a decision made
@@ -247,4 +235,22 @@ Note content.
 ` + "```" + `
 
 The document footer (version and last updated date) is automatically maintained whenever the file is modified through ` + "`prd`" + ` commands.
+
+## Progress tracking
+
+Progress is tracked in a separate ` + "`progress.md`" + ` file next to ` + "`prd.md`" + `. The PRD file is immutable for progress operations. Completing user stories and adding notes writes to ` + "`progress.md`" + `:
+
+` + "```markdown" + `
+# Progress
+
+- [ ] US-1
+- [x] US-2
+- [ ] US-3
+
+## Notes
+
+### 2026-01-28
+
+Note content.
+` + "```" + `
 `

@@ -89,6 +89,24 @@ Note content.
 
 The ID must follow the format `US-X` where `X` is a sequential number starting from 1. A priority can optionally be added as `PX` (1 = highest, 5 = lowest, default 3). Acceptance criteria use markdown task list syntax (`- [ ]` / `- [x]`).
 
+### Progress tracking
+
+Progress is tracked in a separate `progress.md` file next to `prd.md`. The PRD file is immutable for progress operations. Completing user stories and adding notes writes to `progress.md`:
+
+```markdown
+# Progress
+
+- [ ] US-1
+- [x] US-2
+- [ ] US-3
+
+## Notes
+
+### 2026-01-28
+
+Note content.
+```
+
 ### Document footer
 
 The version footer (`---` followed by version and date) is automatically maintained. Every mutation through `prd` increments the minor version and updates the date.
@@ -106,8 +124,7 @@ Running `prd` with no arguments opens the interactive terminal UI. You can also 
 | `n` | Feature list | New feature |
 | `n` | Feature detail | New user story |
 | `d` | Feature detail | Delete user story |
-| `Space` | User story detail | Toggle criterion |
-| `c` | User story detail | Complete all criteria |
+| `c` | User story detail | Toggle story completion |
 | `/` | Feature list | Search |
 | `Tab` | Forms | Next field |
 
@@ -121,7 +138,7 @@ prd feat <id>                        # Print full PRD (validates structure)
 prd feat new --name "..." [--description "..."]  # Create feature, prints new ID
 prd feat current                     # Get feature ID from current git branch
 prd feat start <id>                  # Create and checkout feat/<dir> branch
-prd feat <id> bump                   # Bump version and update date
+prd feat <id> bump                   # Bump version and update date (adter manual edit)
 ```
 
 ### User stories
@@ -134,9 +151,8 @@ prd feat <id> us new --name "..." \  # Create user story
   [--description "..."] \
   [--acceptance-criteria "..." --acceptance-criteria "..."] \
   [--technical-considerations "..."]
-prd feat <id> us <us-id> accept ls    # List acceptance criteria
-prd feat <id> us <us-id> complete    # Mark all criteria as done
-prd feat <id> us <us-id> accept <n> complete  # Mark Nth criterion as done
+prd feat <id> us <us-id> accept ls    # List acceptance criteria (read-only)
+prd feat <id> us <us-id> complete    # Toggle story completion in progress.md
 prd feat <id> us <us-id> delete      # Remove user story
 ```
 

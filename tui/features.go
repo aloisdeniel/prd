@@ -113,6 +113,6 @@ func (m featureListModel) selectedEntry() *prd.FeatureEntry {
 }
 
 func (m featureListModel) statusHelp() string {
-	parts := []string{"j/k navigate", "enter open", "n new", "/ search", "q quit"}
+	parts := []string{"j/k navigate", "enter open", "f/n new feature", "/ search", "q quit"}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render(strings.Join(parts, "  "))
 }

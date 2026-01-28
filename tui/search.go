@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -101,13 +100,13 @@ func (m *searchModel) filterResults() {
 func (m searchModel) Update(msg tea.Msg) (searchModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, keys.Up):
+		switch msg.String() {
+		case "up":
 			if m.cursor > 0 {
 				m.cursor--
 			}
 			return m, nil
-		case key.Matches(msg, keys.Down):
+		case "down":
 			if m.cursor < len(m.results)-1 {
 				m.cursor++
 			}
@@ -171,5 +170,5 @@ func (m searchModel) selectedResult() *searchResult {
 }
 
 func (m searchModel) statusHelp() string {
-	return dimStyle.Render("type to search  j/k navigate  enter open  esc back")
+	return dimStyle.Render("type to search  ↑/↓ navigate  enter open  esc back")
 }

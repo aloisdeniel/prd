@@ -19,6 +19,7 @@ var (
 	flagAcceptanceCriteria      []string
 	flagTechnicalConsiderations string
 	flagNoteContent             string
+	flagPriority                int
 )
 
 func init() {
@@ -26,6 +27,7 @@ func init() {
 	featCmd.Flags().StringVar(&flagDescription, "description", "", "Feature or user story description")
 	featCmd.Flags().StringSliceVar(&flagAcceptanceCriteria, "acceptance-criteria", nil, "Acceptance criteria for a user story")
 	featCmd.Flags().StringVar(&flagTechnicalConsiderations, "technical-considerations", "", "Technical considerations for a user story")
+	featCmd.Flags().IntVar(&flagPriority, "priority", 3, "User story priority (1-5)")
 	featCmd.Flags().StringVar(&flagNoteContent, "content", "", "Note content")
 	rootCmd.AddCommand(featCmd)
 }
@@ -74,15 +76,15 @@ func runFeat(cmd *cobra.Command, args []string) error {
 		os.Exit(1)
 	}
 
+	if len(args) >= 2 && args[1] == "us" {
+		return routeUS(path, feature, args[2:])
+	}
+
 	if errs := prd.Validate(*feature); len(errs) > 0 {
 		for _, e := range errs {
 			fmt.Fprintln(os.Stderr, e.Error())
 		}
 		os.Exit(1)
-	}
-
-	if len(args) >= 2 && args[1] == "us" {
-		return routeUS(path, feature, args[2:])
 	}
 
 	// prd feat <feature-id>
@@ -99,9 +101,9 @@ func routeUS(path string, feature *prd.Feature, args []string) error {
 
 	switch args[0] {
 	case "ls":
-		return runUserStoryList(*feature)
+		return runUserStoryList(path, *feature)
 	case "next":
-		return runUserStoryNext(*feature)
+		return runUserStoryNext(path, *feature)
 	case "new":
 		return runUserStoryNew(path)
 	}
@@ -121,23 +123,11 @@ func routeUS(path string, feature *prd.Feature, args []string) error {
 		case "complete":
 			return runUserStoryComplete(path, usID)
 		case "accept":
-			if len(args) < 3 {
-				fmt.Fprintln(os.Stderr, "usage: prd feat <feature-id> us <user-story-id> accept <ls|<criterion-number> complete>")
+			if len(args) < 3 || args[2] != "ls" {
+				fmt.Fprintln(os.Stderr, "usage: prd feat <feature-id> us <user-story-id> accept ls")
 				os.Exit(1)
 			}
-			if args[2] == "ls" {
-				return runAcceptList(*feature, usID)
-			}
-			if len(args) < 4 || args[3] != "complete" {
-				fmt.Fprintln(os.Stderr, "usage: prd feat <feature-id> us <user-story-id> accept <criterion-number> complete")
-				os.Exit(1)
-			}
-			acNum, err := strconv.Atoi(args[2])
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid acceptance criterion number %q\n", args[2])
-				os.Exit(1)
-			}
-			return runAcceptCriterion(path, usID, acNum)
+			return runAcceptList(*feature, usID)
 		}
 	}
 
@@ -152,7 +142,7 @@ func routeNote(featureID string, args []string) error {
 		os.Exit(1)
 	}
 
-	path, feature, err := prd.LoadFeature("prd", featureID)
+	path, _, err := prd.LoadFeature("prd", featureID)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -160,7 +150,7 @@ func routeNote(featureID string, args []string) error {
 
 	switch args[0] {
 	case "ls":
-		return runNoteList(*feature)
+		return runNoteList(path)
 	case "add":
 		return runNoteAdd(path)
 	default:
@@ -170,12 +160,17 @@ func routeNote(featureID string, args []string) error {
 	return nil
 }
 
-func runNoteList(feature prd.Feature) error {
-	if len(feature.Notes) == 0 {
+func runNoteList(prdPath string) error {
+	notes, err := prd.LoadProgressNotes(prdPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if len(notes) == 0 {
 		fmt.Fprintln(os.Stderr, "no notes found")
 		os.Exit(1)
 	}
-	for _, n := range feature.Notes {
+	for _, n := range notes {
 		firstLine := n.Content
 		if idx := strings.IndexByte(firstLine, '\n'); idx >= 0 {
 			firstLine = firstLine[:idx]
@@ -202,9 +197,10 @@ func runFeatList() error {
 		if err != nil {
 			continue
 		}
+		progress, _ := prd.LoadProgress(e.Path)
 		for _, us := range feature.UserStories {
 			status := "[ ]"
-			if prd.IsStoryCompleted(us) {
+			if progress[us.ID] {
 				status = "[x]"
 			}
 			fmt.Printf("  %s US-%d  %s\n", status, us.ID, us.Name)
@@ -213,10 +209,11 @@ func runFeatList() error {
 	return nil
 }
 
-func runUserStoryList(feature prd.Feature) error {
+func runUserStoryList(prdPath string, feature prd.Feature) error {
+	progress, _ := prd.LoadProgress(prdPath)
 	for _, us := range feature.UserStories {
 		status := "[ ]"
-		if prd.IsStoryCompleted(us) {
+		if progress[us.ID] {
 			status = "[x]"
 		}
 		fmt.Printf("US-%d\t%s\t%s\n", us.ID, us.Name, status)
@@ -310,9 +307,10 @@ func runFeatNew() error {
 	return nil
 }
 
-func runUserStoryNext(feature prd.Feature) error {
+func runUserStoryNext(prdPath string, feature prd.Feature) error {
+	progress, _ := prd.LoadProgress(prdPath)
 	for _, us := range feature.UserStories {
-		if !prd.IsStoryCompleted(us) {
+		if !progress[us.ID] {
 			fmt.Println(us.ID)
 			return nil
 		}
@@ -328,7 +326,7 @@ func runUserStoryNew(path string) error {
 		os.Exit(1)
 	}
 
-	if err := prd.CreateUserStory(path, flagName, flagDescription, flagAcceptanceCriteria, flagTechnicalConsiderations); err != nil {
+	if err := prd.CreateUserStory(path, flagName, flagDescription, flagAcceptanceCriteria, flagTechnicalConsiderations, flagPriority); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -370,14 +368,6 @@ func runAcceptList(feature prd.Feature, usID int) error {
 			status = "[x]"
 		}
 		fmt.Printf("%d\t%s\t%s\n", i+1, status, ac.Text)
-	}
-	return nil
-}
-
-func runAcceptCriterion(path string, usID, acNum int) error {
-	if err := prd.CompleteAcceptanceCriterion(path, usID, acNum); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
 	}
 	return nil
 }
