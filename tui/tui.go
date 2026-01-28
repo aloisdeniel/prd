@@ -88,7 +88,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.wideMode = msg.Width >= 100
+		m.wideMode = true
 		m.sidebar.width = sidebarWidth
 		m.sidebar.height = msg.Height
 		return m, nil

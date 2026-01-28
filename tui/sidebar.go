@@ -186,8 +186,8 @@ func (m sidebarModel) View() string {
 			if fe.entry.Completed == fe.entry.Total && fe.entry.Total > 0 {
 				pStyle = completedStyle
 			}
-			label := truncate(fe.entry.ID+" "+fe.entry.Name, sidebarWidth-10)
-			line := fmt.Sprintf("%s%s %s %s", cursor, arrow, style.Render(label), pStyle.Render(progress))
+			name := truncate(fe.entry.Name, sidebarWidth-16)
+			line := fmt.Sprintf("%s%s %s  %s %s", cursor, arrow, style.Render(fe.entry.ID), style.Render(name), pStyle.Render(progress))
 			b.WriteString(line + "\n")
 		} else {
 			// User story row
@@ -201,12 +201,12 @@ func (m sidebarModel) View() string {
 			if isNext {
 				tag = " " + nextTag
 			}
-			maxName := sidebarWidth - 18
+			maxName := sidebarWidth - 15
 			if isNext {
 				maxName -= 6 // room for " NEXT"
 			}
 			name := truncate(us.Name, maxName)
-			line := fmt.Sprintf("%s  %s %s US-%d  %s%s", cursor, status, renderPriority(us.Priority), us.ID, style.Render(name), tag)
+			line := fmt.Sprintf("%s  %s US-%d  %s%s", cursor, status, us.ID, style.Render(name), tag)
 			b.WriteString(line + "\n")
 		}
 	}
