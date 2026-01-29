@@ -2,6 +2,10 @@
 
 A CLI tool to manage product requirements as local markdown documents in your repository. Designed to be both human-readable and AI-friendly.
 
+#### Why using a tool instead of let the AI analyze the raw markdown files directly?
+
+Because the context blows up quickly when the number of features and user stories increases. `prd` helps by providing commands to list features and user stories with progress summaries, so you can give the AI only the relevant parts. The AI is then able to extract only what matters for the current task.
+
 ## Install
 
 ```sh
